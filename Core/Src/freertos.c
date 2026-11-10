@@ -48,18 +48,18 @@
 /* USER CODE BEGIN Variables */
 
 /* USER CODE END Variables */
-/* Definitions for task */
-osThreadId_t taskHandle;
-const osThreadAttr_t task_attributes = {
-  .name = "task",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+/* Definitions for ui_task */
+osThreadId_t ui_taskHandle;
+const osThreadAttr_t ui_task_attributes = {
+  .name = "ui_task",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal,
 };
 /* Definitions for crg_test_task */
 osThreadId_t crg_test_taskHandle;
 const osThreadAttr_t crg_test_task_attributes = {
   .name = "crg_test_task",
-  .stack_size = 256 * 4,
+  .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for imu_task */
@@ -67,21 +67,21 @@ osThreadId_t imu_taskHandle;
 const osThreadAttr_t imu_task_attributes = {
   .name = "imu_task",
   .stack_size = 1024 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityHigh1,
 };
-/* Definitions for gimbal_task */
-osThreadId_t gimbal_taskHandle;
-const osThreadAttr_t gimbal_task_attributes = {
-  .name = "gimbal_task",
-  .stack_size = 1024 * 4,
-  .priority = (osPriority_t) osPriorityLow,
-};
-/* Definitions for shoot_task */
-osThreadId_t shoot_taskHandle;
-const osThreadAttr_t shoot_task_attributes = {
-  .name = "shoot_task",
+/* Definitions for referee_usart_t */
+osThreadId_t referee_usart_tHandle;
+const osThreadAttr_t referee_usart_t_attributes = {
+  .name = "referee_usart_t",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for chassis_task */
+osThreadId_t chassis_taskHandle;
+const osThreadAttr_t chassis_task_attributes = {
+  .name = "chassis_task",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityAboveNormal,
 };
 
 /* Private function prototypes -----------------------------------------------*/
@@ -92,8 +92,8 @@ const osThreadAttr_t shoot_task_attributes = {
 void StartDefaultTask(void *argument);
 void Crg_test_Task(void *argument);
 void Imu_Task(void *argument);
-void Gimbal_Task(void *argument);
-void Shoot_Task(void *argument);
+void Referee_Usart_Task(void *argument);
+void Chassis_Task(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -124,8 +124,8 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of task */
-  taskHandle = osThreadNew(StartDefaultTask, NULL, &task_attributes);
+  /* creation of ui_task */
+  ui_taskHandle = osThreadNew(StartDefaultTask, NULL, &ui_task_attributes);
 
   /* creation of crg_test_task */
   crg_test_taskHandle = osThreadNew(Crg_test_Task, NULL, &crg_test_task_attributes);
@@ -133,11 +133,11 @@ void MX_FREERTOS_Init(void) {
   /* creation of imu_task */
   imu_taskHandle = osThreadNew(Imu_Task, NULL, &imu_task_attributes);
 
-  /* creation of gimbal_task */
-  gimbal_taskHandle = osThreadNew(Gimbal_Task, NULL, &gimbal_task_attributes);
+  /* creation of referee_usart_t */
+  referee_usart_tHandle = osThreadNew(Referee_Usart_Task, NULL, &referee_usart_t_attributes);
 
-  /* creation of shoot_task */
-  shoot_taskHandle = osThreadNew(Shoot_Task, NULL, &shoot_task_attributes);
+  /* creation of chassis_task */
+  chassis_taskHandle = osThreadNew(Chassis_Task, NULL, &chassis_task_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -156,7 +156,7 @@ void MX_FREERTOS_Init(void) {
   * @retval None
   */
 /* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
+__weak void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
   /* Infinite loop */
@@ -203,40 +203,40 @@ __weak void Imu_Task(void *argument)
   /* USER CODE END Imu_Task */
 }
 
-/* USER CODE BEGIN Header_Gimbal_Task */
+/* USER CODE BEGIN Header_Referee_Usart_Task */
 /**
-* @brief Function implementing the gimbal_task thread.
+* @brief Function implementing the referee_usart_t thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_Gimbal_Task */
-__weak void Gimbal_Task(void *argument)
+/* USER CODE END Header_Referee_Usart_Task */
+__weak void Referee_Usart_Task(void *argument)
 {
-  /* USER CODE BEGIN Gimbal_Task */
+  /* USER CODE BEGIN Referee_Usart_Task */
   /* Infinite loop */
   for(;;)
   {
     osDelay(1);
   }
-  /* USER CODE END Gimbal_Task */
+  /* USER CODE END Referee_Usart_Task */
 }
 
-/* USER CODE BEGIN Header_Shoot_Task */
+/* USER CODE BEGIN Header_Chassis_Task */
 /**
-* @brief Function implementing the shoot_task thread.
+* @brief Function implementing the chassis_task thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_Shoot_Task */
-__weak void Shoot_Task(void *argument)
+/* USER CODE END Header_Chassis_Task */
+__weak void Chassis_Task(void *argument)
 {
-  /* USER CODE BEGIN Shoot_Task */
+  /* USER CODE BEGIN Chassis_Task */
   /* Infinite loop */
   for(;;)
   {
     osDelay(1);
   }
-  /* USER CODE END Shoot_Task */
+  /* USER CODE END Chassis_Task */
 }
 
 /* Private application code --------------------------------------------------*/

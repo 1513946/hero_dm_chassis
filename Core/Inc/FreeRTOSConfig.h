@@ -69,7 +69,7 @@ extern uint32_t SystemCoreClock;
 #define configUSE_SB_COMPLETED_CALLBACK          ( 0 )
 #define configUSE_MINI_LIST_ITEM                ( 1 )
 #define configMINIMAL_STACK_SIZE                 ((uint16_t)128)
-#define configTOTAL_HEAP_SIZE                    ((size_t)15360)
+#define configTOTAL_HEAP_SIZE                    ((size_t)24576)
 #define configMAX_TASK_NAME_LEN                  ( 16 )
 #define configHEAP_CLEAR_MEMORY_ON_FREE          0
 #define configUSE_TRACE_FACILITY                 1
@@ -83,6 +83,10 @@ extern uint32_t SystemCoreClock;
 /* Defaults to size_t for backward compatibility, but can be changed
    if lengths will always be less than the number of bytes in a size_t. */
 #define configMESSAGE_BUFFER_LENGTH_TYPE         size_t
+
+#define INCLUDE_xTaskGetHandle          1
+#define INCLUDE_pcTaskGetTaskName       1
+
 /* USER CODE END MESSAGE_BUFFER_LENGTH_TYPE */
 
 /* Co-routine definitions. */
