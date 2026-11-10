@@ -60,6 +60,12 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN Private defines */
 
+/* BMI088 chip select pins (SPI2: PC1=MOSI, PC2_C=MISO, PB13=SCK) */
+#define CS1_ACCEL_Pin       GPIO_PIN_0
+#define CS1_ACCEL_GPIO_Port GPIOC
+#define CS1_GYRO_Pin        GPIO_PIN_3
+#define CS1_GYRO_GPIO_Port  GPIOC
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

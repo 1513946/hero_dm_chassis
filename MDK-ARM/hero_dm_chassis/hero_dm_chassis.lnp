@@ -49,6 +49,8 @@
 "hero_dm_chassis\cmsis_os2.o"
 "hero_dm_chassis\heap_4.o"
 "hero_dm_chassis\port.o"
+"hero_dm_chassis\bmi088driver.o"
+"hero_dm_chassis\bmi088middleware.o"
 --strict --scatter "hero_dm_chassis\hero_dm_chassis.sct"
 --summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
 --info sizes --info totals --info unused --info veneers

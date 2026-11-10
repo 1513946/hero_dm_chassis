@@ -117,6 +117,11 @@ int main(void)
   MX_USART10_UART_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+  /* Enable the DWT cycle counter: used by BMI088_delay_us().
+     No debugger needed, TRCENA must be set once. */
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0U;
+  DWT->CTRL  |= DWT_CTRL_CYCCNTENA_Msk;
 
   /* USER CODE END 2 */
 

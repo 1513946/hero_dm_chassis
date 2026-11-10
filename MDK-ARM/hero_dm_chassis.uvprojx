@@ -10,6 +10,7 @@
       <TargetName>hero_dm_chassis</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
+      <pCCUsed>5060960::V5.06 update 7 (build 960)::.\ARMCC</pCCUsed>
       <uAC6>0</uAC6>
       <TargetOption>
         <TargetCommonOption>
@@ -205,7 +206,7 @@
             <Ro2Chk>0</Ro2Chk>
             <Ro3Chk>0</Ro3Chk>
             <Ir1Chk>1</Ir1Chk>
-            <Ir2Chk>1</Ir2Chk>
+            <Ir2Chk>0</Ir2Chk>
             <Ra1Chk>0</Ra1Chk>
             <Ra2Chk>0</Ra2Chk>
             <Ra3Chk>0</Ra3Chk>
@@ -338,7 +339,7 @@
               <MiscControls></MiscControls>
               <Define>USE_PWR_LDO_SUPPLY,USE_HAL_DRIVER,STM32H723xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include;../Middlewares/ST/ARM/DSP/Inc</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include;../Middlewares/ST/ARM/DSP/Inc;..\balance_bsp\math_bsp;..\balance_bsp\scm_bsp\imu_driver\bm1088</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -1337,6 +1338,33 @@
         </Group>
         <Group>
           <GroupName>balance_bsp</GroupName>
+          <Files>
+            <File>
+              <FileName>BMI088driver.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\balance_bsp\scm_bsp\imu_driver\bm1088\BMI088driver.c</FilePath>
+            </File>
+            <File>
+              <FileName>BMI088driver.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\balance_bsp\scm_bsp\imu_driver\bm1088\BMI088driver.h</FilePath>
+            </File>
+            <File>
+              <FileName>BMI088Middleware.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\balance_bsp\scm_bsp\imu_driver\bm1088\BMI088Middleware.c</FilePath>
+            </File>
+            <File>
+              <FileName>BMI088Middleware.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\balance_bsp\scm_bsp\imu_driver\bm1088\BMI088Middleware.h</FilePath>
+            </File>
+            <File>
+              <FileName>BMI088reg.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\balance_bsp\scm_bsp\imu_driver\bm1088\BMI088reg.h</FilePath>
+            </File>
+          </Files>
         </Group>
         <Group>
           <GroupName>user_task</GroupName>
