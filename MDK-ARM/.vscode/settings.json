@@ -1,0 +1,9 @@
+{
+    "C_Cpp.intelliSenseEngine": "default",
+    "C_Cpp.errorSquiggles": "enabled",
+    "C_Cpp.default.configurationProvider": "",
+    "clangd.enable": false,
+    "stm32cube-ide-clangd.enable": false,
+    "cmake.configureOnOpen": false,
+    "KeilAssistant.MDK.Uv4Path": "D:\\Keil5\\UV4\\UV4.exe"
+}
