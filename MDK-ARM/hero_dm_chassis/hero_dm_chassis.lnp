@@ -51,6 +51,12 @@
 "hero_dm_chassis\port.o"
 "hero_dm_chassis\bmi088driver.o"
 "hero_dm_chassis\bmi088middleware.o"
+"hero_dm_chassis\crg_filter.o"
+"hero_dm_chassis\can_init.o"
+"hero_dm_chassis\can_user.o"
+"hero_dm_chassis\pid.o"
+"hero_dm_chassis\chassis_task.o"
+"hero_dm_chassis\chassis_stubs.o"
 --strict --scatter "hero_dm_chassis\hero_dm_chassis.sct"
 --summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
 --info sizes --info totals --info unused --info veneers

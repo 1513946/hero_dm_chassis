@@ -1,296 +1,256 @@
 #include "can_user.h"
 #include "main.h"
+#include "fdcan.h"
 #include "string.h"
-extern CAN_HandleTypeDef hcan1;
-extern CAN_HandleTypeDef hcan2;
-#define ABS(x) (((x)>0) ? (x) : (-(x)))
 
-#define get_motor_measure(ptr,data)                                     \
-	{                                                                   \
-        (ptr)->last_ecd = (ptr)->ecd;                                   \
-        (ptr)->ecd = (uint16_t)((data)[0] << 8 | (data)[1]);            \
-        (ptr)->speed_rpm = (uint16_t)((data)[2] << 8 | (data)[3]);      \
+#define chassis_can hfdcan1   /* åº•ç›˜ CAN */
+#define gimbal_can  hfdcan2   /* äº‘å° CAN */
+
+#define ABS(x) (((x) > 0) ? (x) : (-(x)))
+
+/* M3508/C620 åé¦ˆè§£æï¼šæœºæ¢°è§’ã€è½¬é€Ÿã€è½¬çŸ©ç”µæµã€æ¸©åº¦ */
+#define get_motor_measure(ptr, data)                                    \
+    {                                                                   \
+        (ptr)->last_ecd      = (ptr)->ecd;                              \
+        (ptr)->ecd           = (uint16_t)((data)[0] << 8 | (data)[1]);  \
+        (ptr)->speed_rpm     = (uint16_t)((data)[2] << 8 | (data)[3]);  \
         (ptr)->given_current = (uint16_t)((data)[4] << 8 | (data)[5]);  \
-        (ptr)->temperate = (data)[6];                                   \
-	}
+        (ptr)->temperate     = (data)[6];                               \
+    }
 
-// #define get_9025_motor_measure(ptr, data)                                    \
-//    {                                                                   \
-//        (ptr)->last_ecd = (ptr)->ecd;                                   \
-//        (ptr)->ecd = (uint16_t)((data)[7] << 8 | (data)[6]);            \
-//        (ptr)->speed_rpm = (int16_t)((data)[5] << 8 | (data)[4]);      \
-//        (ptr)->given_current = (int16_t)((data)[3] << 8 | (data)[2]);  \
-//        (ptr)->temperate = (data)[1];                                   \
-//    }
+/* äº‘å°æ¿ 0x307 æ•°æ®è§£æï¼ˆé¥æ§é‡ + å„ç§æ¨¡å¼ä½ï¼‰ */
+#define get_gimbal_measure(ptr, data)                                   \
+    {                                                                   \
+        (ptr)->x_rc_data       = ((data)[0] << 8) | ((data)[1]);        \
+        (ptr)->y_rc_data       = ((data)[2] << 8) | ((data)[3]);        \
+        (ptr)->x_key_data      = ((data)[4] >> 6) & 3;                  \
+        (ptr)->y_key_data      = ((data)[4] >> 4) & 3;                  \
+        (ptr)->chassis_mode    = ((data)[5] >> 6) & 3;                  \
+        (ptr)->cap_mode        = ((data)[5] >> 5) & 1;                  \
+        (ptr)->top_mode        = ((data)[5] >> 4) & 1;                  \
+        (ptr)->follow_mode     = ((data)[5] >> 3) & 1;                  \
+        (ptr)->follow_mode_last= ((data)[5] >> 2) & 1;                  \
+        (ptr)->key_control     = ((data)[5] >> 1) & 1;                  \
+    }
 
-#define get_gimbal_measure(ptr,data)					        \
-	{    											            \
-		(ptr)->x_rc_data=((data)[0]<<8)|((data)[1]);  			\
-		(ptr)->y_rc_data=((data)[2]<<8)|((data)[3]);  			\
-		(ptr)->x_key_data=((data)[4]>>6)&3;  			        \
-		(ptr)->y_key_data=((data)[4]>>4)&3;  			        \
-		(ptr)->chassis_mode=((data)[5]>>6)&3;  			        \
-		(ptr)->cap_mode=((data)[5]>>5)&1;  			            \
-		(ptr)->top_mode=((data)[5]>>4)&1;  			            \
-		(ptr)->follow_mode=((data)[5]>>3)&1;  			        \
-		(ptr)->follow_mode_last=((data)[5]>>2)&1;  			    \
-		(ptr)->key_control=((data)[5]>>1)&1;  			        \
-	}                                                       \
-                                                           
-#define get_cap_measure(ptr,data)                                      \
-	{                                                                  \
-	    (ptr)->V_cap_value=(fp32)(((data)[2]<<8)|((data)[3]))*0.001;   \
-	}
+/* è¶…ç”µ 0x304 ç”µå®¹ç”µå‹è§£æ */
+#define get_cap_measure(ptr, data)                                      \
+    {                                                                   \
+        (ptr)->V_cap_value = (fp32)(((data)[2] << 8) | ((data)[3])) * 0.001f; \
+    }
+
 motor_measure_t motor_gimbal[1];
 motor_measure_t motor_chassis[4];
-/* Keil Watch: distinguish received OFF frames from local mode changes. */
-volatile uint32_t chassis_top_rx_on_count = 0;
-volatile uint32_t chassis_top_rx_off_count = 0;
-volatile uint32_t chassis_top_rx_bad_frame_count = 0;
-volatile uint32_t chassis_can_rx_error_count = 0;
-volatile uint8_t chassis_top_rx_last_off_flags = 0;
 
-chassis_c_get_data_t mini_chassis = 
+/* Keil Watch è¯Šæ–­è®¡æ•°å™¨ï¼šåŒºåˆ†æ”¶åˆ°çš„ OFF å¸§ä¸æœ¬åœ°æ¨¡å¼å˜åŒ– */
+volatile uint32_t chassis_top_rx_on_count      = 0;
+volatile uint32_t chassis_top_rx_off_count     = 0;
+volatile uint32_t chassis_top_rx_bad_frame_count = 0;
+volatile uint32_t chassis_can_rx_error_count   = 0;
+volatile uint8_t  chassis_top_rx_last_off_flags = 0;
+
+chassis_c_get_data_t mini_chassis =
 {
-		0,
-		0,
-		0,
-		0,
-		0,
-		0,
-		0,
-	    0,
-	    0,
-	    0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
-	
+
 super_cap_t super_cap;
 
-static uint8_t tx_data[8] = {0};
-
-static CAN_TxHeaderTypeDef chassis_tx_message;
+/* å‘é€ç¼“å†² */
 static uint8_t chassis_can_send_data[8];
-
-static CAN_TxHeaderTypeDef chassis_can_send_gimbal_msg;
 static uint8_t chassis_send_gimbal_data[8];
-
-static CAN_TxHeaderTypeDef cap_can_send_msg;
 static uint8_t chassis_send_cap_data[8];
-
-static CAN_TxHeaderTypeDef ramp_chassis_pitch;
 static uint8_t chassis_send_ramp_pitch[4];
 
+/* äº‘å° CAN æ¥æ”¶å¸§è®¡æ•°ï¼ˆè°ƒè¯•ç”¨ï¼‰ */
+int from_yuntai_can = 0;
 
-void get_9025_motor_ecd(motor_measure_t *ptr,uint8_t *data)                       
-    {                                                                  
-        (ptr)->ecd= ((data)[2]<<8)|((data)[3]);
-      //(ptr)->ecdd= (data)[0];			
-    }
-/*can_recive*/
-int from_yuntai_can=0;
-void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+/* 9025 ç”µæœºï¼ˆäº‘å°ï¼‰ç¼–ç å™¨è§£æï¼šåªå–æœºæ¢°è§’ */
+void get_9025_motor_ecd(motor_measure_t *ptr, uint8_t *data)
 {
-   CAN_RxHeaderTypeDef rx_header;
-    uint8_t rx_data[8];
-    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rx_header, rx_data) != HAL_OK)
+    ptr->ecd = (uint16_t)((data[2] << 8) | (data[3]));
+}
+
+/* FDCAN å‘é€ï¼šç»å…¸ CAN æ•°æ®å¸§ï¼ˆ1Mbpsï¼ŒBRS å…³é—­ï¼‰ */
+static void fdcan_send(FDCAN_HandleTypeDef *hfdcan, uint32_t std_id, uint8_t dlc_bytes, uint8_t *data)
+{
+    FDCAN_TxHeaderTypeDef tx = {0};
+
+    tx.Identifier          = std_id;
+    tx.IdType              = FDCAN_STANDARD_ID;
+    tx.TxFrameType         = FDCAN_DATA_FRAME;
+    tx.DataLength          = (uint32_t)dlc_bytes;
+    tx.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+    tx.BitRateSwitch       = FDCAN_BRS_OFF;
+    tx.FDFormat            = FDCAN_CLASSIC_CAN;
+    tx.TxEventFifoControl  = FDCAN_NO_TX_EVENTS;
+    tx.MessageMarker       = 0;
+
+    if (HAL_FDCAN_GetTxFifoFreeLevel(hfdcan) > 0u)
     {
-        chassis_can_rx_error_count++;
+        (void)HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &tx, data);
+    }
+}
+
+/*
+ * FDCAN RX FIFO0 å›è°ƒï¼ˆhfdcan1 / hfdcan2 å…±ç”¨ï¼‰ã€‚
+ * åº•ç›˜ CANï¼š0x201~0x204 ç”µæœºåé¦ˆã€0x304 è¶…ç”µï¼›
+ * äº‘å° CANï¼š0x200 9025 ç¼–ç å™¨ã€0x307 äº‘å°æ•°æ®ã€‚
+ */
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
+{
+    FDCAN_RxHeaderTypeDef rx_header;
+    uint8_t rx_data[8];
+
+    if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) == 0u)
+    {
         return;
     }
-    if(hcan==&hcan1)  //²»×ß»¬»·
-    {
-        switch (rx_header.StdId)
-        {
-        case CAN1_3508_M1_ID:  //201
-        {
-            get_motor_measure(&motor_chassis[0],rx_data);
-            break;
-        }
-        case CAN1_3508_M2_ID:  //202
-        {
-            get_motor_measure(&motor_chassis[1],rx_data);
-            break;
-        }
-		case CAN1_3508_M3_ID:  //203
-        {
-            get_motor_measure(&motor_chassis[2],rx_data);
-            break;
-        }
-		case CAN1_3508_M4_ID:  //204
-        {
-            get_motor_measure(&motor_chassis[3],rx_data);
-            break;
-        }
-		case CAN1_recive_cap_msg: //304
-		{
-			get_cap_measure(&super_cap,rx_data);
-			break;
-		}
 
-        default:
-        {
-             break;
-        }
-  
-        }
-    }
-    else if(hcan==&hcan2)  //×ß»¬»·
+    while (HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0) > 0u)
     {
-        switch (rx_header.StdId)
+        if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data) != HAL_OK)
         {
-       
-        case 0x200:
-        {
-            get_9025_motor_ecd(&motor_gimbal[0],rx_data);
+            chassis_can_rx_error_count++;
             break;
         }
-		case CAN2_recive_gimbal_msg:
-		{
-            if (rx_header.IDE != CAN_ID_STD || rx_header.RTR != CAN_RTR_DATA ||
-                rx_header.DLC != 8U)
+
+        if (hfdcan == &hfdcan1)  /* åº•ç›˜ CANï¼šä¸èµ°æ»‘ç¯ */
+        {
+            switch (rx_header.Identifier)
             {
-                chassis_top_rx_bad_frame_count++;
+            case CAN1_3508_M1_ID:
+                get_motor_measure(&motor_chassis[0], rx_data);
+                break;
+            case CAN1_3508_M2_ID:
+                get_motor_measure(&motor_chassis[1], rx_data);
+                break;
+            case CAN1_3508_M3_ID:
+                get_motor_measure(&motor_chassis[2], rx_data);
+                break;
+            case CAN1_3508_M4_ID:
+                get_motor_measure(&motor_chassis[3], rx_data);
+                break;
+            case CAN1_recive_cap_msg:
+                get_cap_measure(&super_cap, rx_data);
+                break;
+            default:
                 break;
             }
-            if ((rx_data[5] & 0x10U) != 0U)
-            {
-                chassis_top_rx_on_count++;
-            }
-            else
-            {
-                chassis_top_rx_off_count++;
-                chassis_top_rx_last_off_flags = rx_data[5];
-            }
-            from_yuntai_can++;
-            get_gimbal_measure(&mini_chassis,rx_data);
-			break;
-		}
-	
-        default:
-        {    
-             break;
         }
-           
+        else if (hfdcan == &hfdcan2)  /* äº‘å° CANï¼šèµ°æ»‘ç¯ */
+        {
+            switch (rx_header.Identifier)
+            {
+            case 0x200:
+                get_9025_motor_ecd(&motor_gimbal[0], rx_data);
+                break;
+            case CAN2_recive_gimbal_msg:
+                /* æ ¡éªŒï¼šæ ‡å‡†å¸§ + æ•°æ®å¸§ + 8 å­—èŠ‚ */
+                if (rx_header.IdType      != FDCAN_STANDARD_ID ||
+                    rx_header.RxFrameType != FDCAN_DATA_FRAME  ||
+                    rx_header.DataLength  != FDCAN_DLC_BYTES_8)
+                {
+                    chassis_top_rx_bad_frame_count++;
+                    break;
+                }
+                if ((rx_data[5] & 0x10U) != 0U)
+                {
+                    chassis_top_rx_on_count++;
+                }
+                else
+                {
+                    chassis_top_rx_off_count++;
+                    chassis_top_rx_last_off_flags = rx_data[5];
+                }
+                from_yuntai_can++;
+                get_gimbal_measure(&mini_chassis, rx_data);
+                break;
+            default:
+                break;
+            }
         }
     }
 }
 
+/* ---- å‘é€ ---- */
 
- /*CAN_send*/
-
+/* å‘é€ 4 ä¸ªåº•ç›˜ç”µæœºç”µæµï¼ˆ0x200ï¼Œå¤§ç«¯ï¼‰ */
 void CAN_cmd_chassis(int16_t motor1, int16_t motor2, int16_t motor3, int16_t motor4)
 {
-     uint32_t send_mail_box;
-    chassis_tx_message.StdId = CAN1_chassis_flag_id;
-    chassis_tx_message.IDE = CAN_ID_STD;
-    chassis_tx_message.RTR = CAN_RTR_DATA;
-    chassis_tx_message.DLC = 0x08;
-    chassis_can_send_data[0] = motor1 >> 8;
-    chassis_can_send_data[1] = motor1;
-    chassis_can_send_data[2] = motor2 >> 8;
-    chassis_can_send_data[3] = motor2;
-    chassis_can_send_data[4] = motor3 >> 8;
-    chassis_can_send_data[5] = motor3;
-    chassis_can_send_data[6] = motor4 >> 8;
-    chassis_can_send_data[7] = motor4;
+    chassis_can_send_data[0] = (uint8_t)(motor1 >> 8);
+    chassis_can_send_data[1] = (uint8_t)motor1;
+    chassis_can_send_data[2] = (uint8_t)(motor2 >> 8);
+    chassis_can_send_data[3] = (uint8_t)motor2;
+    chassis_can_send_data[4] = (uint8_t)(motor3 >> 8);
+    chassis_can_send_data[5] = (uint8_t)motor3;
+    chassis_can_send_data[6] = (uint8_t)(motor4 >> 8);
+    chassis_can_send_data[7] = (uint8_t)motor4;
 
-    HAL_CAN_AddTxMessage(&chassis_can, &chassis_tx_message, chassis_can_send_data, &send_mail_box);
+    fdcan_send(&chassis_can, CAN1_chassis_flag_id, 8, chassis_can_send_data);
 }
 
+/* å‘é€åˆ°äº‘å°ï¼ˆ0x308ï¼‰ã€‚åŸä»£ç  DLC=0x0A å¯¹ç»å…¸ CAN éæ³•ï¼ˆæœ€å¤§ 8ï¼‰ï¼Œå·²ä¿®æ­£ä¸º 8 */
 void CAN_chassis_send_gimbal(RM_Referee_system_t *rm_data)
 {
-	uint32_t send_mail_box;
-    chassis_can_send_gimbal_msg.StdId =  CAN2_send_gimbal_msg;
-    chassis_can_send_gimbal_msg.IDE = CAN_ID_STD;  //±ê×¼ID(11Î»Êı)
-    chassis_can_send_gimbal_msg.RTR = CAN_RTR_DATA;  //ÇëÇó£¨RTR£©ÎªÊı¾İÖ¡
-    chassis_can_send_gimbal_msg.DLC = 0x0A;  //°ËÎ»Êı¾İÎ»
-    chassis_send_gimbal_data[0] = (rm_data->robot_state.robot_id);
-    chassis_send_gimbal_data[1] = (rm_data->robot_state.robot_level);
-    chassis_send_gimbal_data[2] = (rm_data->robot_state.shooter_barrel_cooling_value);
-    chassis_send_gimbal_data[3] = (uint8_t)(rm_data->shoot_data_t.bullet_speed*10);
-    chassis_send_gimbal_data[4] = (rm_data->robot_state.shooter_barrel_heat_limit>>8);
-    chassis_send_gimbal_data[5] = (rm_data->robot_state.shooter_barrel_heat_limit);
-    chassis_send_gimbal_data[6] = (rm_data->power_heat_data_t.shooter_17mm_1_barrel_heat>>8);
-    chassis_send_gimbal_data[7] = (rm_data->power_heat_data_t.shooter_17mm_1_barrel_heat);
-    HAL_CAN_AddTxMessage(&gimbal_can, &chassis_can_send_gimbal_msg, chassis_send_gimbal_data, &send_mail_box);
+    chassis_send_gimbal_data[0] = (uint8_t)(rm_data->robot_state.robot_id);
+    chassis_send_gimbal_data[1] = (uint8_t)(rm_data->robot_state.robot_level);
+    chassis_send_gimbal_data[2] = (uint8_t)(rm_data->robot_state.shooter_barrel_cooling_value);
+    chassis_send_gimbal_data[3] = (uint8_t)(rm_data->shoot_data_t.bullet_speed * 10.0f);
+    chassis_send_gimbal_data[4] = (uint8_t)(rm_data->robot_state.shooter_barrel_heat_limit >> 8);
+    chassis_send_gimbal_data[5] = (uint8_t)(rm_data->robot_state.shooter_barrel_heat_limit);
+    chassis_send_gimbal_data[6] = (uint8_t)(rm_data->power_heat_data_t.shooter_17mm_1_barrel_heat >> 8);
+    chassis_send_gimbal_data[7] = (uint8_t)(rm_data->power_heat_data_t.shooter_17mm_1_barrel_heat);
+
+    fdcan_send(&gimbal_can, CAN2_send_gimbal_msg, 8, chassis_send_gimbal_data);
 }
 
+/* å‘é€åˆ°è¶…ç”µï¼ˆ0x305ï¼‰ */
 void CAN_cmd_cap(RM_Referee_system_t *rm_data)
 {
-	uint32_t send_mail_box;
-    cap_can_send_msg.StdId =  CAN1_send_cap_msg;
-    cap_can_send_msg.IDE = CAN_ID_STD;    //±ê×¼ID(11Î»Êı)
-    cap_can_send_msg.RTR = CAN_RTR_DATA;  //ÇëÇó£¨RTR£©ÎªÊı¾İÖ¡
-    cap_can_send_msg.DLC = 0x08;          //°ËÎ»Êı¾İÎ»
-    chassis_send_cap_data[0] = (rm_data->robot_state.chassis_power_limit>>8);
-    chassis_send_cap_data[1] = (rm_data->robot_state.chassis_power_limit);
-    chassis_send_cap_data[2] = (rm_data->power_heat_data_t.buffer_energy>>8);
-    chassis_send_cap_data[3] = (rm_data->power_heat_data_t.buffer_energy);
-    chassis_send_cap_data[4] = (0);
-    chassis_send_cap_data[5] = (0);
-    chassis_send_cap_data[6] = (0);
-    chassis_send_cap_data[7] = (0);
-	HAL_CAN_AddTxMessage(&chassis_can, &cap_can_send_msg, chassis_send_cap_data, &send_mail_box);
-}
-/**
-  * @brief  Can×ÜÏß·¢ËÍ¿ØÖÆ²ÎÊı
-  * @param
-  * @retval
-  */
-void CAN_cmd_chassis_read(uint8_t id,int16_t current)
-{
-    // CAN_TxHeaderTypeDef chassis_tx_message;             /**!< canÍ¨ĞÅ·¢ËÍĞ­ÒéÍ· */
-    uint32_t canTxMailbox= CAN_TX_MAILBOX0;
+    chassis_send_cap_data[0] = (uint8_t)(rm_data->robot_state.chassis_power_limit >> 8);
+    chassis_send_cap_data[1] = (uint8_t)(rm_data->robot_state.chassis_power_limit);
+    chassis_send_cap_data[2] = (uint8_t)(rm_data->power_heat_data_t.buffer_energy >> 8);
+    chassis_send_cap_data[3] = (uint8_t)(rm_data->power_heat_data_t.buffer_energy);
+    chassis_send_cap_data[4] = 0;
+    chassis_send_cap_data[5] = 0;
+    chassis_send_cap_data[6] = 0;
+    chassis_send_cap_data[7] = 0;
 
-    chassis_tx_message.StdId = 0x140+id;
-    chassis_tx_message.IDE = CAN_ID_STD;
-    chassis_tx_message.RTR = CAN_RTR_DATA;
-    chassis_tx_message.DLC = 0x08;
+    fdcan_send(&chassis_can, CAN1_send_cap_msg, 8, chassis_send_cap_data);
+}
+
+/*
+ * è°ƒè¯•ç”¨ï¼šç»™å•ä¸ªç”µæœºå‘é€æ§åˆ¶ç”µæµï¼ˆ0x140 + idï¼‰ã€‚
+ * åŸä»£ç æ··æ‚äº† hcan1 é‚®ç®±åˆ¤æ–­å´å¾€ hcan2 å‘é€çš„ bugï¼Œå·²æ”¹ä¸ºå¹²å‡€åœ°å‘åˆ°äº‘å° CANã€‚
+ */
+void CAN_cmd_chassis_read(uint8_t id, int16_t current)
+{
     chassis_can_send_data[0] = 0xA1;
     chassis_can_send_data[1] = 0;
     chassis_can_send_data[2] = 0;
     chassis_can_send_data[3] = 0;
-    chassis_can_send_data[4] = current;
-    chassis_can_send_data[5] = (current>>8);
+    chassis_can_send_data[4] = (uint8_t)current;
+    chassis_can_send_data[5] = (uint8_t)(current >> 8);
     chassis_can_send_data[6] = 0;
     chassis_can_send_data[7] = 0;
 
-    //ÕÒµ½¿ÕµÄ·¢ËÍÓÊÏä °ÑÊı¾İ·¢ËÍ³öÈ¥
-    while (HAL_CAN_GetTxMailboxesFreeLevel(&hcan2) == 0);	// Èç¹ûÈı¸ö·¢ËÍÓÊÏä¶¼×èÈûÁË¾ÍµÈ´ıÖ±µ½ÆäÖĞÄ³¸öÓÊÏä¿ÕÏĞ
-    if ((hcan1.Instance->TSR & CAN_TSR_TME0) != RESET)
-    {   // ¼ì²é·¢ËÍÓÊÏä0×´Ì¬ Èç¹ûÓÊÏä0¿ÕÏĞ¾Í½«´ı·¢ËÍÊı¾İ·ÅÈëFIFO0
-        canTxMailbox = CAN_TX_MAILBOX0;
-    }
-    else if ((hcan1.Instance->TSR & CAN_TSR_TME1) != RESET)
-    {
-        canTxMailbox = CAN_TX_MAILBOX1;
-    }
-    else if ((hcan1.Instance->TSR & CAN_TSR_TME2) != RESET)
-    {
-        canTxMailbox = CAN_TX_MAILBOX2;
-    }
-
-
-    if(HAL_CAN_AddTxMessage(&hcan2, &chassis_tx_message, chassis_can_send_data, (uint32_t *)&canTxMailbox)==HAL_OK) {};
+    fdcan_send(&gimbal_can, (uint32_t)(0x140u + id), 8, chassis_can_send_data);
 }
+
+/* å‘é€åº•ç›˜ pitch åˆ°äº‘å°ï¼ˆ0x306ï¼Œ4 å­—èŠ‚ fp32ï¼‰ */
 void CAN_chassis_ramp_pitch_to_gimbal(fp32 pitch)
 {
-	uint32_t send_mail_box;
-    ramp_chassis_pitch.StdId =  CAN2_send_gimbal_pitch;
-    ramp_chassis_pitch.IDE = CAN_ID_STD;    //±ê×¼ID(11Î»Êı)
-    ramp_chassis_pitch.RTR = CAN_RTR_DATA;  //ÇëÇó£¨RTR£©ÎªÊı¾İÖ¡
-    ramp_chassis_pitch.DLC = 0x04;          //°ËÎ»Êı¾İÎ»
-	memcpy(chassis_send_ramp_pitch,&pitch,sizeof(pitch));
-	HAL_CAN_AddTxMessage(&gimbal_can, &ramp_chassis_pitch, chassis_send_ramp_pitch, &send_mail_box);
+    memcpy(chassis_send_ramp_pitch, &pitch, sizeof(pitch));
+    fdcan_send(&gimbal_can, CAN2_send_gimbal_pitch, 4, chassis_send_ramp_pitch);
 }
 
-/*CAN_point_get*/
-//CAN1
+/* ---- æ¥æ”¶ç‚¹è·å– ---- */
+
 const motor_measure_t *get_motor_chassis_motor_measure_point(uint8_t i)
 {
-    return &motor_chassis[i&3];
+    return &motor_chassis[i & 3];
 }
-//CAN2
 
 const motor_measure_t *get_motor_gimbal_yaw_measure_point(void)
 {
@@ -304,5 +264,5 @@ const super_cap_t *get_super_cap_measure_point(void)
 
 const chassis_c_get_data_t *get_c_gimbal_data_point(void)
 {
-	return &mini_chassis;
+    return &mini_chassis;
 }

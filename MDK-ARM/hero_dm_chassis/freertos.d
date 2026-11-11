@@ -53,9 +53,3 @@ hero_dm_chassis\freertos.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_ti
 hero_dm_chassis\freertos.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h
 hero_dm_chassis\freertos.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
 hero_dm_chassis\freertos.o: ../Drivers/CMSIS/RTOS2/Include/cmsis_os2.h
-hero_dm_chassis\freertos.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdio.h
-hero_dm_chassis\freertos.o: ../Core/Inc/usart.h
-hero_dm_chassis\freertos.o: ../Core/Inc/fdcan.h
-hero_dm_chassis\freertos.o: ..\balance_bsp\scm_bsp\imu_driver\bm1088\BMI088driver.h
-hero_dm_chassis\freertos.o: ..\balance_bsp\math_bsp\c_data_typedef.h
-hero_dm_chassis\freertos.o: ..\balance_bsp\scm_bsp\imu_driver\bm1088\BMI088Middleware.h

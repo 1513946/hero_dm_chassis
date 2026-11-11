@@ -1,118 +1,88 @@
 #ifndef CAN_USER_H
 #define CAN_USER_H
-/*
-                                                                                                                                                                    
-                                                                                                                                                                                   
-                         ||                  |||                                                                                              |||                   |||||||||      
-                         ||           ||||||||||||||       ||||||||||||||||||        |||||||                             ||||||||      ||||||||||||||            |||||||||||||||   
-                        ||||           ||||||||||||||       |||||||||||||||||      ||||||||||                          ||||||||||||     ||||||||||||||          |||||      |||||   
-                        ||||             ||||   ||||||        ||||        |||     ||||   ||||                         |||||    ||||       ||||   ||||||        ||||          |||   
-                        ||||             ||||    |||||        ||||         ||     |||      ||                        ||||        |||      ||||    |||||       ||||            ||   
-                       ||||||            ||||     ||||        ||||         ||    ||||      ||                       ||||         |||      ||||     ||||      ||||             ||   
-                       || |||            ||||     ||||        ||||               ||||      ||                      ||||           ||      ||||     ||||      ||||                  
-                      ||| |||            ||||     ||||        ||||       ||       ||||                             ||||                   ||||     ||||     |||||                  
-                      ||  ||||           ||||    ||||         ||||       ||       ||||||                           ||||                   ||||    ||||      ||||                   
-                      ||   |||           ||||   ||||          ||||       ||        |||||||                        ||||                    ||||   ||||       ||||                   
-                     |||   ||||          ||||||||||           |||||||||||||         ||||||||                      ||||                    ||||||||||        ||||                   
-                     ||||||||||          ||||  ||||           |||||||||||||           |||||||                     ||||                    ||||  ||||        ||||        |||||||||||
-                    |||||||||||          ||||   ||||          ||||       ||             ||||||                    ||||                    ||||   ||||       ||||        |||||||||||
-                    |||     ||||         ||||   ||||          ||||       ||               ||||                    ||||                    ||||   ||||       |||||           ||||   
-                    ||      ||||         ||||    ||||         ||||       ||      ||        |||                    ||||                    ||||    ||||       ||||           ||||   
-                   |||       |||         ||||    |||||        ||||        |  ||  |||       |||                     ||||                   ||||    |||||      |||||          ||||   
-                   ||        ||||        ||||     ||||        ||||          |||  |||       |||                     ||||           ||      ||||     ||||      |||||          ||||   
-                   ||         |||        ||||     |||||       ||||          |||  ||||      |||                      ||||          ||      ||||     |||||      |||||         ||||   
-                  |||         ||||       |||||     ||||||     ||||         |||   ||||||  ||||                       ||||         |||      |||||     ||||||     ||||||      |||||   
-               |||||||||   |||||||||  ||||||||||   ||||||| |||||||||||||||||||    ||||||||||                         |||||     ||||    ||||||||||   |||||||      ||||||||||||||      
-               |||||||||   |||||||||  ||||||||||    |||||| |||||||||||||||||||      ||||||                             ||||||||||||    ||||||||||    ||||||        |||||||||       
-                                                                                                                         ||||||||                                                  
-                                                                                                                                                                                   
-                                                                                                ||||||||||||||||                                                                   
-                                                                                                ||||||||||||||||                                                                                                                                                                   
- 
-*/
+
 #include "c_data_typedef.h"
 #include "can_init.h"
 #include "referee.h"
 #include <stdbool.h>
-#define gimbal_can hcan2
-#define chassis_can hcan1
+
+/* æ€»çº¿åˆ«åï¼šæ²¿ç”¨è€ C æ¿åˆ’åˆ†
+ *   hfdcan1 = åº•ç›˜ CANï¼ˆ4 ä¸ª M3508ï¼‰
+ *   hfdcan2 = äº‘å° CANï¼ˆäº‘å°æ¿é€šä¿¡ + yaw ç”µæœºï¼‰
+ * å…·ä½“å¼•è„šåœ¨ CubeMX é‡Œé…ç½®ï¼Œè¿™é‡ŒåªæŒ‰é€»è¾‘æ€»çº¿åŒºåˆ†ã€‚ */
 
 typedef enum
 {
-    /*chassis_motor_get*/ 
-    /****    hcan1  µ×ÅÌµç»ú  ****/   
-    CAN1_3508_M1_ID = 0x201,   //µ×ÅÌµç»ú½ÓÊÕ±¨ÎÄ
-    CAN1_3508_M2_ID = 0x202,
-    CAN1_3508_M3_ID = 0x203,
-    CAN1_3508_M4_ID = 0x204,
+    /****  hcan1 åº•ç›˜ç”µæœºæ¥æ”¶æŠ¥æ–‡  ****/
+    CAN1_3508_M1_ID = 0x201,   /* åº•ç›˜ç”µæœº 1 åé¦ˆ */
+    CAN1_3508_M2_ID = 0x202,   /* åº•ç›˜ç”µæœº 2 åé¦ˆ */
+    CAN1_3508_M3_ID = 0x203,   /* åº•ç›˜ç”µæœº 3 åé¦ˆ */
+    CAN1_3508_M4_ID = 0x204,   /* åº•ç›˜ç”µæœº 4 åé¦ˆ */
 
-    /****  hcan2  µ×ÅÌµç»ú  ****/
-    CAN2_yaw_motor_id=0x141,           //yawÖáµç»ú½ÓÊÕ±¨ÎÄ µ×ÅÌºÍÔÆÌ¨Í¬Ê±½âËã½µµÍÑÓ³Ù
+    /****  hcan2 äº‘å°ç”µæœº  ****/
+    CAN2_yaw_motor_id = 0x141, /* yaw è½´ç”µæœºåé¦ˆï¼Œåº•ç›˜ä¸äº‘å°åŒæ—¶è§£ç®—é™ä½å»¶è¿Ÿ */
 
-    /*chassis_motor_send_flag_id*/
-    CAN1_chassis_flag_id   =  0x200,   //µ×ÅÌµç»ú·¢ËÍ±¨ÎÄ
-	
-    /*other_msg_id*/
-	CAN2_send_gimbal_msg   =  0x308,    //µ×ÅÌ·¢ËÍµ½ÔÆÌ¨ 0x308
-	CAN2_recive_gimbal_msg =  0x307,    //µ×ÅÌ½ÓÊÕÔÆÌ¨ 0x307
-	CAN2_send_gimbal_pitch =0X306,      //·¢ËÍµ×ÅÌpitch
-	
-	CAN1_recive_cap_msg = 0X304,        //½ÓÊÕÀ´×Ô³¬µçµÄĞÅÏ¢
-	CAN1_send_cap_msg   = 0X305,        //·¢ËÍĞÅÏ¢µ½µ×ÅÌ
-	
-}can_msg_id;
+    /****  åº•ç›˜ç”µæœºå‘é€æŠ¥æ–‡  ****/
+    CAN1_chassis_flag_id = 0x200,
 
+    /****  å…¶å®ƒæŠ¥æ–‡  ****/
+    CAN2_send_gimbal_msg   = 0x308,  /* åº•ç›˜å‘é€åˆ°äº‘å° */
+    CAN2_recive_gimbal_msg = 0x307,  /* åº•ç›˜æ¥æ”¶äº‘å°ï¼ˆé¥æ§å™¨æ•°æ®/æ¨¡å¼ï¼‰ */
+    CAN2_send_gimbal_pitch = 0x306,  /* åº•ç›˜å‘é€ pitch */
 
-typedef struct 
+    CAN1_recive_cap_msg = 0x304,     /* æ¥æ”¶è¶…ç”µä¿¡æ¯ */
+    CAN1_send_cap_msg   = 0x305,     /* å‘é€ä¿¡æ¯åˆ°è¶…ç”µ */
+} can_msg_id;
+
+typedef struct
 {
-    uint16_t ecd;           //±àÂëÆ÷»úĞµÊıÖµ
-    int16_t speed_rpm;      //×ª×Ó×ª¶¯ËÙ¶È Ã¿·ÖÖÓ×ª
-    int16_t given_current;  //×ª×Ó×ª¾ØµçÁ÷
-    uint8_t temperate;      //×ª×ÓÎÂ¶È
-    int16_t last_ecd;       //ÉÏÒ»´Î±àÂëÆ÷Öµ
-    int16_t delta_ecd;      //ÔöÁ¿
-    int16_t round;          //×ªµÄÈ¦Êı
-}motor_measure_t;
+    uint16_t ecd;           /* ç¼–ç å™¨æœºæ¢°æ•°å€¼ */
+    int16_t  speed_rpm;     /* è½¬å­è½¬é€Ÿ rpm */
+    int16_t  given_current; /* è½¬å­è½¬çŸ©ç”µæµ */
+    uint8_t  temperate;     /* è½¬å­æ¸©åº¦ */
+    int16_t  last_ecd;      /* ä¸Šä¸€æ¬¡ç¼–ç å™¨å€¼ */
+    int16_t  delta_ecd;     /* å¢é‡ */
+    int16_t  round;         /* è½¬çš„åœˆæ•° */
+} motor_measure_t;
 
 typedef struct can_user
 {
-	fp32 V_cap_value;                         //µçÈİµçÑ¹
-}super_cap_t;
+    fp32 V_cap_value;       /* ç”µå®¹ç”µå‹ */
+} super_cap_t;
 
-typedef struct 
+/* äº‘å°æ¿ç» 0x307 ä¸‹å‘çš„æ•°æ®ï¼ˆåº•ç›˜æ¨¡å¼å’Œé¥æ§é‡éƒ½ä»è¿™é‡Œæ¥ï¼‰ */
+typedef struct
 {
-	int16_t x_rc_data;        //16Î» X_rc
-	int16_t y_rc_data;        //16Î» Y_rc
-	uint8_t x_key_data;       //Á½Î» X_key
-	uint8_t y_key_data;       //Á½Î» Y_key
-	uint8_t chassis_mode;     //Á½Î» µ×ÅÌÄ£Ê½  0CHASSIS_ZERO_FORCE 1CHASSIS_NO_MOVE 2CHASSIS_NO_FOLLOW_GIMBAL 3CHASSIS_FOLLOW_GIMBAL
-	uint8_t cap_mode;         //Ò»Î» ³¬µç
-	uint8_t top_mode;         //Ò»Î» Ğ¡ÍÓÂİ
-	uint8_t follow_mode;      //Ò»Î» Ò»¼üµôÍ·Ê¹ÓÃ
-	uint8_t follow_mode_last; //Ò»Î» Ò»¼üµôÍ·Ê¹ÓÃ
-	uint8_t key_control;      //Ê¹ÓÃ¼üÅÌ¿ØÖÆ½øÈë±ÈÈüÄ£Ê½
-	
-}chassis_c_get_data_t;
+    int16_t x_rc_data;        /* 16 ä½ X_rc æ‘‡æ† */
+    int16_t y_rc_data;        /* 16 ä½ Y_rc æ‘‡æ† */
+    uint8_t x_key_data;       /* ä¸¤ä½ X_key */
+    uint8_t y_key_data;       /* ä¸¤ä½ Y_key */
+    uint8_t chassis_mode;     /* åº•ç›˜æ¨¡å¼ 0é›¶åŠ› 1é™æ­¢ 2ä¸è·Ÿéš 3è·Ÿéš */
+    uint8_t cap_mode;         /* è¶…ç”µå¼€å…³ */
+    uint8_t top_mode;         /* å°é™€èºå¼€å…³ */
+    uint8_t follow_mode;      /* ä¸€é”®æ‰å¤´ */
+    uint8_t follow_mode_last; /* ä¸€é”®æ‰å¤´ä¸Šä¸€æ¬¡çŠ¶æ€ */
+    uint8_t key_control;      /* é”®ç›˜æ§åˆ¶ï¼ˆæ¯”èµ›æ¨¡å¼ï¼‰ */
+} chassis_c_get_data_t;
 
-/* CAN2 0x307 receive diagnostics for Keil Watch. */
+/* 0x307 æ¥æ”¶è¯Šæ–­è®¡æ•°å™¨ï¼Œä¾› Keil Watch æŸ¥çœ‹ */
 extern volatile uint32_t chassis_top_rx_on_count;
 extern volatile uint32_t chassis_top_rx_off_count;
 extern volatile uint32_t chassis_top_rx_bad_frame_count;
 extern volatile uint32_t chassis_can_rx_error_count;
-extern volatile uint8_t chassis_top_rx_last_off_flags;
+extern volatile uint8_t  chassis_top_rx_last_off_flags;
 
-/*CAN_send*/
-extern void CAN_cmd_chassis(int16_t motor1, int16_t motor2, int16_t motor3, int16_t motor4);  //chassis
-extern void CAN_cmd_cap(RM_Referee_system_t *rm_data);                                        //chassis_to_cap
-extern void CAN_chassis_send_gimbal(RM_Referee_system_t *rm_data);                            //
+/* ---- å‘é€ ---- */
+extern void CAN_cmd_chassis(int16_t motor1, int16_t motor2, int16_t motor3, int16_t motor4);
+extern void CAN_cmd_cap(RM_Referee_system_t *rm_data);
+extern void CAN_chassis_send_gimbal(RM_Referee_system_t *rm_data);
 extern void CAN_chassis_ramp_pitch_to_gimbal(fp32 pitch);
-extern void CAN_cmd_chassis_read(uint8_t id,int16_t current);
-/*CAN_recive_point*/
+extern void CAN_cmd_chassis_read(uint8_t id, int16_t current);
+
+/* ---- æ¥æ”¶ç‚¹è·å– ---- */
 extern const motor_measure_t *get_motor_chassis_motor_measure_point(uint8_t i);
 extern const motor_measure_t *get_motor_gimbal_yaw_measure_point(void);
 extern const super_cap_t *get_super_cap_measure_point(void);
 extern const chassis_c_get_data_t *get_c_gimbal_data_point(void);
 
-
 #endif
-

@@ -1,164 +1,138 @@
 #ifndef CHASSIS_TASK_H
 #define CHASSIS_TASK_H
-/*
-                                                                                                                                                                    
-                                                                                                                                                                                   
-                         ||                  |||                                                                                              |||                   |||||||||      
-                         ||           ||||||||||||||       ||||||||||||||||||        |||||||                             ||||||||      ||||||||||||||            |||||||||||||||   
-                        ||||           ||||||||||||||       |||||||||||||||||      ||||||||||                          ||||||||||||     ||||||||||||||          |||||      |||||   
-                        ||||             ||||   ||||||        ||||        |||     ||||   ||||                         |||||    ||||       ||||   ||||||        ||||          |||   
-                        ||||             ||||    |||||        ||||         ||     |||      ||                        ||||        |||      ||||    |||||       ||||            ||   
-                       ||||||            ||||     ||||        ||||         ||    ||||      ||                       ||||         |||      ||||     ||||      ||||             ||   
-                       || |||            ||||     ||||        ||||               ||||      ||                      ||||           ||      ||||     ||||      ||||                  
-                      ||| |||            ||||     ||||        ||||       ||       ||||                             ||||                   ||||     ||||     |||||                  
-                      ||  ||||           ||||    ||||         ||||       ||       ||||||                           ||||                   ||||    ||||      ||||                   
-                      ||   |||           ||||   ||||          ||||       ||        |||||||                        ||||                    ||||   ||||       ||||                   
-                     |||   ||||          ||||||||||           |||||||||||||         ||||||||                      ||||                    ||||||||||        ||||                   
-                     ||||||||||          ||||  ||||           |||||||||||||           |||||||                     ||||                    ||||  ||||        ||||        |||||||||||
-                    |||||||||||          ||||   ||||          ||||       ||             ||||||                    ||||                    ||||   ||||       ||||        |||||||||||
-                    |||     ||||         ||||   ||||          ||||       ||               ||||                    ||||                    ||||   ||||       |||||           ||||   
-                    ||      ||||         ||||    ||||         ||||       ||      ||        |||                    ||||                    ||||    ||||       ||||           ||||   
-                   |||       |||         ||||    |||||        ||||        |  ||  |||       |||                     ||||                   ||||    |||||      |||||          ||||   
-                   ||        ||||        ||||     ||||        ||||          |||  |||       |||                     ||||           ||      ||||     ||||      |||||          ||||   
-                   ||         |||        ||||     |||||       ||||          |||  ||||      |||                      ||||          ||      ||||     |||||      |||||         ||||   
-                  |||         ||||       |||||     ||||||     ||||         |||   ||||||  ||||                       ||||         |||      |||||     ||||||     ||||||      |||||   
-               |||||||||   |||||||||  ||||||||||   ||||||| |||||||||||||||||||    ||||||||||                         |||||     ||||    ||||||||||   |||||||      ||||||||||||||      
-               |||||||||   |||||||||  ||||||||||    |||||| |||||||||||||||||||      ||||||                             ||||||||||||    ||||||||||    ||||||        |||||||||       
-                                                                                                                         ||||||||                                                  
-                                                                                                                                                                                   
-                                                                                                ||||||||||||||||                                                                   
-                                                                                                ||||||||||||||||                                                                                                                                                                   
- 
-*/
 
 #include "main.h"
 #include "c_data_typedef.h"
 #include "can_user.h"
 #include "pid.h"
-#include "dt7_remote_read.h"
 #include "crg_filter.h"
-#include "usb_task.h"
 #include "referee.h"
-#define CHASSIS_LOOP_TIME 2                        //µ◊≈Ã»ŒŒÒ÷‹∆⁄2MS
-#define MINI_CHASSIS_INIT_TIME 100                 //µ◊≈Ã»ŒŒÒ≥ı ºªØ100MS
 
+#define CHASSIS_LOOP_TIME       2     /* Â∫ïÁõò‰ªªÂä°Âë®Êúü 2msÔºàÊú¨Â∑•Á®ãÂÆûÈôÖÁî® osDelay(1)Ôºâ */
+#define MINI_CHASSIS_INIT_TIME  100   /* Â∫ïÁõò‰ªªÂä°ÂàùÂßãÂåñ 100ms */
 
-#define MAX_CURRENT_3508 16384       //3508◊Ó¥ÛµÁ¡˜
-#define RAD_TO_ANGLE 57.2957795f     //3508ª°∂»◊™Ω«∂»
+#define MAX_CURRENT_3508 16384       /* 3508 ÊúÄÂ§ßÁîµÊµÅÔºà¬±16384 = ¬±20AÔºâ */
+#define RAD_TO_ANGLE     57.2957795f
 
-/*REMOTE_DT7*/
-#define CHASSIS_REMOTE_DEADLINE 10   //“£øÿ∆˜À¿«¯
-#define CHASSIS_VX   3               //µ◊≈ÃxÀŸ∂»
-#define CHASSIS_VY   2               //µ◊≈ÃyÀŸ∂»
-#define CHASSIS_WZ   1               //µ◊≈ÃzÀŸ∂»
-#define LEFT         1               //◊Û≤¶∏À
-#define RIGHT        0               //”“≤¶∏À
-#define ACTION_FLAG  80              //“°∏À¥•∑¢––Œ™«¯º‰
-#define RC_X_SENSE   48              //X¡È√Ù∂»
-#define RC_Y_SENSE   48              //Y¡È√Ù∂»
+/* ---- DT7 ÈÅ•ÊéßÂô® ---- */
+#define CHASSIS_REMOTE_DEADLINE 10   /* ÈÅ•ÊéßÂô®Ê≠ªÂå∫ */
+#define CHASSIS_VX   3               /* Â∫ïÁõò x ÈÄüÂ∫¶ÈÄöÈÅì */
+#define CHASSIS_VY   2               /* Â∫ïÁõò y ÈÄüÂ∫¶ÈÄöÈÅì */
+#define CHASSIS_WZ   1               /* Â∫ïÁõò z ÈÄüÂ∫¶ÈÄöÈÅì */
+#define LEFT         1               /* Â∑¶Êã®ÊùÜ */
+#define RIGHT        0               /* Âè≥Êã®ÊùÜ */
+#define ACTION_FLAG  80              /* ÊëáÊùÜËß¶ÂèëË°å‰∏∫Âå∫Èó¥ */
+#define RC_X_SENSE   48              /* X ÁÅµÊïèÂ∫¶ */
+#define RC_Y_SENSE   48              /* Y ÁÅµÊïèÂ∫¶ */
 
+/* ---- ÈîÆÁõò DT7 ---- */
+#define FORWARED  ((uint8_t)1 << 0)
+#define BACK      ((uint8_t)1 << 1)
+#define RGHTWARD  ((uint8_t)1 << 0)
+#define LEFTWARD  ((uint8_t)1 << 1)
 
-/*MOUSE_DT7*/
-#define FORWARED        ((uint8_t)1<<0)
-#define BACK            ((uint8_t)1<<1)
-#define RGHTWARD        ((uint8_t)1<<0)
-#define LEFTWARD        ((uint8_t)1<<1)
+/* ÈîÆÁõòÊåâÈîÆ‰ΩçÔºàÂéü dt7_remote_read.h ÁöÑÂÆö‰πâÔºåÊú¨ÊùøÊú™ÂêØÁî® SBUSÔºåËøôÈáåÊú¨Âú∞Â£∞ÊòéÔºâ */
+#define KEY_PRESSED_OFFSET_SHIFT ((uint16_t)1 << 4)
+#define KEY_PRESSED_OFFSET_C     ((uint16_t)1 << 13)
+#define CAP_ON_KEY KEY_PRESSED_OFFSET_SHIFT
+#define TOP_ON_KEY KEY_PRESSED_OFFSET_C
 
-#define CAP_ON_KEY       KEY_PRESSED_OFFSET_SHIFT
-#define TOP_ON_KEY       KEY_PRESSED_OFFSET_C
+/* ---- È∫¶ËΩÆÊ≠£ÂêëËß£ÁÆó ---- */
+#define MOTOR_SPEED_TO_CHASSIS_SPEED_VX 0.25f   /* ËΩ¨Êç¢ÊØî‰æã ÂæÖÊµã */
+#define MOTOR_SPEED_TO_CHASSIS_SPEED_VY 0.25f
+#define MOTOR_SPEED_TO_CHASSIS_SPEED_WZ 0.25f
+#define MOTOR_DISTANCE_TO_CENTER        0.364f  /* Â∞èÈ∫¶ ÁîµÊú∫Âà∞‰∏≠ÂøÉË∑ùÁ¶ª */
 
-/*¬Û¬÷’˝œÚΩ‚À„*/
-#define MOTOR_SPEED_TO_CHASSIS_SPEED_VX 0.25f        //◊™ªª±»¿˝  ¥˝≤‚
-#define MOTOR_SPEED_TO_CHASSIS_SPEED_VY 0.25f        //◊™ªª±»¿˝  
-#define MOTOR_SPEED_TO_CHASSIS_SPEED_WZ 0.25f        //◊™ªª±»¿˝
-#define MOTOR_DISTANCE_TO_CENTER        0.364f        //–°¬Û µÁª˙µΩ÷––ƒæ‡¿Î
-//µ◊≈Ã∏˙ÀÊΩ«∂»
-#define CHASSIS_FOLLOW_GIMBAL_ANGLE_NOMAL 0.0f       //∆’Õ®µ◊≈Ã∏˙ÀÊ‘∆Ã®Ω«∂»
-#define CHASSIS_FOLLOW_GIMBAL_ANGLE_CHANGE 0.0f      //“ªº¸µÙÕ∑µ◊≈Ã∏˙ÀÊ‘∆Ã®Ω«∂»
+/* ---- Â∫ïÁõòË∑üÈöèËßíÂ∫¶ ---- */
+#define CHASSIS_FOLLOW_GIMBAL_ANGLE_NOMAL  0.0f
+#define CHASSIS_FOLLOW_GIMBAL_ANGLE_CHANGE 0.0f
 
-/*chassis speed_pid*/
-#define CHASSIS_SPEED_PID_P 20.0f
-#define CHASSIS_SPEED_PID_I 0.15f                   //∂ØÃ¨µ˜’˚
-#define CHASSIS_SPEED_PID_D 10.0f
-#define CHASSIS_SPEED_PID_MAX_OUT MAX_CURRENT_3508
-#define CHASSIS_SPEED_PID_MAX_I_OUT 2000.0f         //∂ØÃ¨µ˜’˚
-/*chassis follow_gimbal_pid*/
-#define CHASSIS_FOLLOW_GIMBAL_PID_P 28000.0f
-#define CHASSIS_FOLLOW_GIMBAL_PID_I 0.0f
-#define CHASSIS_FOLLOW_GIMBAL_PID_D 3000.0f
-#define CHASSIS_FOLLOW_GIMBAL_PID_MAX_OUT 30000.0f
+/* ---- Â∫ïÁõòÈÄüÂ∫¶ÁéØ PID ---- */
+#define CHASSIS_SPEED_PID_P        20.0f
+#define CHASSIS_SPEED_PID_I        0.15f    /* Âä®ÊÄÅË∞ÉÊï¥ */
+#define CHASSIS_SPEED_PID_D        10.0f
+#define CHASSIS_SPEED_PID_MAX_OUT  MAX_CURRENT_3508
+#define CHASSIS_SPEED_PID_MAX_I_OUT 2000.0f /* Âä®ÊÄÅË∞ÉÊï¥ */
+
+/* ---- Â∫ïÁõòË∑üÈöè‰∫ëÂè∞ PID ---- */
+#define CHASSIS_FOLLOW_GIMBAL_PID_P        28000.0f
+#define CHASSIS_FOLLOW_GIMBAL_PID_I        0.0f
+#define CHASSIS_FOLLOW_GIMBAL_PID_D        3000.0f
+#define CHASSIS_FOLLOW_GIMBAL_PID_MAX_OUT  30000.0f
 #define CHASSIS_FOLLOW_GIMBAL_PID_MAX_I_OUT 1500.0f
 
-#define CHASSIS_SOLLOW_GIMBAL_FORWARD_KP  0.07f
+#define CHASSIS_SOLLOW_GIMBAL_FORWARD_KP   0.07f
 
-/*chassis_power_buffer_control*/
-#define BUFFER_PID_P            -2.5f
-#define BUFFER_PID_I            -0.001f
-#define BUFFER_PID_D            -0.000f
-#define BUFFER_PID_MAX_OUT      60
-#define BUFFER_PID_MAX_I_OUT    10
-//dt7øÿ÷∆œ¬µƒµ◊≈ÃÀŸ∂» VX_VY
-#define CHASSIS_SPEED_MAX_VX_DT7 3300.0f        //ª˘¥°≥ı ºÀŸ∂»
+/* ---- Â∫ïÁõòÂäüÁéáÁºìÂÜ≤ÊéßÂà∂ ---- */
+#define BUFFER_PID_P       -2.5f
+#define BUFFER_PID_I       -0.001f
+#define BUFFER_PID_D       -0.000f
+#define BUFFER_PID_MAX_OUT  60
+#define BUFFER_PID_MAX_I_OUT 10
+
+/* ---- DT7 ÊéßÂà∂‰∏ãÁöÑÂ∫ïÁõòÈÄüÂ∫¶ VX/VY ---- */
+#define CHASSIS_SPEED_MAX_VX_DT7 3300.0f
 #define CHASSIS_SPEED_MAX_VY_DT7 3300.0f
-//±»»¸º¸≈Ãøÿ÷∆œ¬µƒµ◊≈ÃÀŸ∂» VX_VY
-#define CHASSIS_SPEED_MAX_VX_KEYBOARD 8000.0f   //≥ı ºÀŸ∂»
+
+/* ---- ÊØîËµõÈîÆÁõòÊéßÂà∂‰∏ãÁöÑÂ∫ïÁõòÈÄüÂ∫¶ ---- */
+#define CHASSIS_SPEED_MAX_VX_KEYBOARD 8000.0f
 #define CHASSIS_SPEED_MAX_VY_KEYBOARD 6000.0f
-//≥¨µÁœ¬–°Õ”¬› WZ 
-#define CHASSIS_SPEED_TOP_CAP_ON  26000.0f       //–°Õ”¬›ÀŸ∂» 
+
+/* ---- Ë∂ÖÁîµ‰∏ãÂ∞èÈôÄËû∫ WZ ---- */
+#define CHASSIS_SPEED_TOP_CAP_ON  26000.0f
 #define CHASSIS_SPEED_TOP_CAP_OFF 26000.0f
 
-//µ◊≈Ãπ¶¬ ≤‚ ‘ø™πÿ
+/* ---- Â∫ïÁõòÂäüÁéáÊµãËØïÂºÄÂÖ≥ ---- */
 #define CHASSIS_POWER_TEST_ON 1
-//π¶¬ ƒ‚∫œ
+
+/* ---- ÂäüÁéáÊãüÂêàÁ≥ªÊï∞ ---- */
 #define K0 0.6641993412640775f
 #define K1 0.006444284468539646f
 #define K2 0.0001423857226262331f
 #define K3 0.017644430204543864f
 #define K4 0.1650143850678085f
 #define K5 3.096721772539512e-05f
-//π¶¬ øÿ÷∆
-#define CHASSIS_POWER_BUFFER_USE_MAX_NO_GAIN 40;  //√ª”–‘ˆ“Ê π”√ª∫≥Âπ¶¬  ˝÷µ
-#define CHASSIS_POWER_BUFFER_USE_MAX_GAIN   200;  //”–‘ˆ“Ê π”√ª∫≥Âπ¶¬  ˝÷µ
-#define CHASSIS_POWER_BUFFER_ALl_NO_GAIN     60;  //√ª”–‘ˆ“Êª∫≥Âπ¶¬  ˝÷µ…œœﬁ
-#define CHASSIS_POWER_BUFFER_ALL_GAIN       250;  //”–‘ˆ“Êª∫≥Âπ¶¬  ˝÷µ…œœﬁ
-#define CHASSIS_POWER_RM_KP                 0.5;  //ª∫≥Âª÷∏¥P
-//π¶¬ ∑÷≈‰
-#define CHASSIS_POWER_TO_ACTION_GAIN        1.0f;  //º∆À„π¶¬ À•ºı±»¿˝
-#define CHASSIS_POWER_VX_GAIN               0.4f;  //x∑ΩœÚπ¶¬ ‘ˆ“Ê
-#define CHASSIS_POWER_VY_GAIN               0.3f;  //y∑ΩœÚπ¶¬ ‘ˆ“Ê
-#define CHASSIS_POWER_WZ_GAIN               0.3f;  //z∑ΩœÚπ¶¬ ‘ˆ“Ê
 
-#define RPM_RADS                            0.1047197533333   //2*pi/60
-#define MA_A                                0.0012207031250   //20/16384
+/* ---- ÂäüÁéáÊéßÂà∂ ---- */
+#define CHASSIS_POWER_BUFFER_USE_MAX_NO_GAIN 40
+#define CHASSIS_POWER_BUFFER_USE_MAX_GAIN    200
+#define CHASSIS_POWER_BUFFER_ALl_NO_GAIN     60
+#define CHASSIS_POWER_BUFFER_ALL_GAIN        250
+#define CHASSIS_POWER_RM_KP                  0.5
+#define CHASSIS_POWER_TO_ACTION_GAIN         1.0f
+#define CHASSIS_POWER_VX_GAIN                0.4f
+#define CHASSIS_POWER_VY_GAIN                0.3f
+#define CHASSIS_POWER_WZ_GAIN                0.3f
 
-#define LPF_CHASSIS_X                        0.08f
-#define LPF_CHASSIS_Y                        0.08f
-#define LPF_CHASSIS_Z                        0.02f
+#define RPM_RADS  0.1047197533333   /* 2*pi/60 */
+#define MA_A      0.0012207031250   /* 20/16384 */
 
-#define SLOPE_CHASSIS_X_ACCL                 8.5f
-#define SLOPE_CHASSIS_X_RETA                 19.5f
-#define SLOPE_CHASSIS_Y_ACCL                 500.5f
-#define SLOPE_CHASSIS_Y_RETA                 1000.5f
-#define SLOPE_CHASSIS_W_ACCL                 5.5f
-#define SLOPE_CHASSIS_W_RETA                 1.5f
+#define LPF_CHASSIS_X 0.08f
+#define LPF_CHASSIS_Y 0.08f
+#define LPF_CHASSIS_Z 0.02f
 
-#define HALF_ECD_RANGE        32768
-#define ECD_RANGE             65536
-#define YAW_CHANGE_WAIT_TIME    1600          //“ªº¸µÙÕ∑µ»¥˝ ±º‰
-#define YAW_ZERO_ANGLE_SET      58000        //YAW ¡„µ„
-#define YAW_CHANGE_ANGLE_SET    24200   //“ªº¸µÙÕ∑¡„µ„
-#define MOTOR_ECD_TO_RAD       0.0000958738f  // 2*PI/65536
+#define SLOPE_CHASSIS_X_ACCL 8.5f
+#define SLOPE_CHASSIS_X_RETA 19.5f
+#define SLOPE_CHASSIS_Y_ACCL 500.5f
+#define SLOPE_CHASSIS_Y_RETA 1000.5f
+#define SLOPE_CHASSIS_W_ACCL 5.5f
+#define SLOPE_CHASSIS_W_RETA 1.5f
 
+#define HALF_ECD_RANGE      32768
+#define ECD_RANGE           65536
+#define YAW_CHANGE_WAIT_TIME 1600
+#define YAW_ZERO_ANGLE_SET   58000
+#define YAW_CHANGE_ANGLE_SET 24200
+#define MOTOR_ECD_TO_RAD     0.0000958738f  /* 2*PI/65536 */
 
-/*µ◊≈ÃÀŸ∂»µÕÕ®¬À≤®*/
+/* ---- Â∫ïÁõòÊ®°Âºè ---- */
 typedef enum
 {
-    CHASSIS_ZERO_FORCE,      //¡„¡¶ƒ£ Ω
-    CHASSIS_NO_MOVE,         //æ≤÷πƒ£ Ω
-    CHASSIS_NO_FOLLOW_GIMBAL,//≤ª∏˙ÀÊ‘∆Ã®ƒ£ Ω
-    CHASSIS_FOLLOW_GIMBAL,   //∏˙ÀÊ‘∆Ã®ƒ£ Ω
+    CHASSIS_ZERO_FORCE,       /* Èõ∂ÂäõÊ®°Âºè */
+    CHASSIS_NO_MOVE,          /* ÈùôÊ≠¢Ê®°Âºè */
+    CHASSIS_NO_FOLLOW_GIMBAL, /* ‰∏çË∑üÈöè‰∫ëÂè∞Ê®°Âºè */
+    CHASSIS_FOLLOW_GIMBAL,    /* Ë∑üÈöè‰∫ëÂè∞Ê®°Âºè */
 } chassi_mode_e;
-
 
 typedef enum
 {
@@ -168,67 +142,66 @@ typedef enum
 
 typedef enum
 {
-	TOP_OFF,
-	TOP_ON,
+    TOP_OFF,
+    TOP_ON,
 } top_mode_e;
 
 typedef enum
 {
-    CHASSIS_FOLLOW_GIMABL_NOMAL,  //∆’Õ®∏˙ÀÊ∑ΩœÚ
+    CHASSIS_FOLLOW_GIMABL_NOMAL,   /* ÊôÆÈÄöË∑üÈöèÊñπÂêë */
     CHASSIS_FOLLOW_GIMABL_CHANGE,
-}chassis_follow_gimbal_state_e;
+} chassis_follow_gimbal_state_e;
 
 typedef enum
 {
-    CHASSIS_TOP_INVE,            //ƒÊ ±’Î–°Õ”¬›
+    CHASSIS_TOP_INVE,              /* ÈÄÜÊó∂ÈíàÂ∞èÈôÄËû∫ */
     CHASSIS_TOP_FWAD,
-}chassis_top_direction_e;
+} chassis_top_direction_e;
 
 typedef struct
 {
-	const motor_measure_t *chassis_motor_feedback;
+    const motor_measure_t *chassis_motor_feedback;
     fp32 speed_rpm;
     fp32 speed_set;
-    fp32 accel;                 
-    int16_t give_current;       //µÁª˙º∆À„µ√µÁ¡˜
-    fp32 motor_power;           //µÁª˙µ±«∞◊‹π¶¬ 
-	fp32 motor_use_power;       //”√ªßº∆À„À˘–Ëπ¶¬ 
-	fp32 motor_i;				//µÁª˙∑¥¿°µÁ¡˜ªªÀ„
-	fp32 motor_use_i;           //”√ªßº∆À„À˘–ËµÁ¡˜◊™ªª
-	fp32 motor_w;               //µÁª˙µ±«∞Ω«ÀŸ∂»
-	fp32 motor_p;               //µ•∏ˆµÁª˙À˘ƒ‹µ√µΩπ¶¬ 
-}chassis_motor_t;
+    fp32 accel;
+    int16_t give_current;       /* ÁîµÊú∫ËÆ°ÁÆóÂæóÂà∞ÁöÑÁîµÊµÅ */
+    fp32 motor_power;           /* ÁîµÊú∫ÂΩìÂâçÊÄªÂäüÁéá */
+    fp32 motor_use_power;       /* Áî®Êà∑ËÆ°ÁÆóÊâÄÈúÄÂäüÁéá */
+    fp32 motor_i;               /* ÁîµÊú∫ÂèçÈ¶àÁîµÊµÅÊç¢ÁÆó */
+    fp32 motor_use_i;           /* Áî®Êà∑ËÆ°ÁÆóÊâÄÈúÄÁîµÊµÅËΩ¨Êç¢ */
+    fp32 motor_w;               /* ÁîµÊú∫ÂΩìÂâçËßíÈÄüÂ∫¶ */
+    fp32 motor_p;               /* Âçï‰∏™ÁîµÊú∫ÊâÄËÉΩÂæóÂà∞ÁöÑÂäüÁéá */
+} chassis_motor_t;
 
 typedef struct
 {
-	chassis_follow_gimbal_state_e gimbal_change;
-	chassis_follow_gimbal_state_e gimbal_change_last;
-	uint8_t  gimbal_change_flag;
-	uint32_t gimbal_change_time;
-	uint32_t gimbal_change_chassis_time;
-	uint8_t  gimbal_change_chassis_flag;
-}chassis_follow_change_t;
-
+    chassis_follow_gimbal_state_e gimbal_change;
+    chassis_follow_gimbal_state_e gimbal_change_last;
+    uint8_t  gimbal_change_flag;
+    uint32_t gimbal_change_time;
+    uint32_t gimbal_change_chassis_time;
+    uint8_t  gimbal_change_chassis_flag;
+} chassis_follow_change_t;
 
 typedef struct
 {
     const super_cap_t *super_cap;
     const RM_Referee_system_t *chassis_rm_data;
-    const RC_ctrl_t *chassis_dt7_remote_control;
-	const chassis_c_get_data_t *chassis_gimbal_can_data;
+    const void *chassis_dt7_remote_control;   /* ÊùøËΩΩ SBUS Êú™ÂêØÁî®ÔºåÂç†‰Ωç */
+    const chassis_c_get_data_t *chassis_gimbal_can_data;
     chassis_motor_t chassis_motor[4];
-	const motor_measure_t *gimbal_yaw_motor;
-	const fp32 *chassis_ins_point;
-	
-	chassis_follow_change_t chassis_follow;
-	
-	slope_plan_t chassis_vx;
-	slope_plan_t chassis_vy;
-	slope_plan_t chassis_w;
-	
+    const motor_measure_t *gimbal_yaw_motor;
+    const fp32 *chassis_ins_point;
+
+    chassis_follow_change_t chassis_follow;
+
+    slope_plan_t chassis_vx;
+    slope_plan_t chassis_vy;
+    slope_plan_t chassis_w;
+
     pid_type_def chassis_speed_pid[4];
     pid_type_def chassis_follow_gimbal_pid;
-	pid_type_def rm_buffer_control_pid;
+    pid_type_def rm_buffer_control_pid;
 
     chassi_mode_e chassis_mode;
     chassi_mode_e chassis_mode_last;
@@ -236,57 +209,58 @@ typedef struct
     top_mode_e chassis_top_mode;
     chassis_follow_gimbal_state_e chassis_follow_gimbal_state;
     chassis_top_direction_e chassis_top_direction;
-    
-    lpf_t chassis_cmd_vx_lpf;  //µ◊≈ÃxÀŸ∂»µÕÕ®
-    lpf_t chassis_cmd_vy_lpf;  //µ◊≈ÃyÀŸ∂»µÕÕ®
-    lpf_t chassis_cmd_wz_lpf;  //µ◊≈ÃzÀŸ∂»µÕÕ®
 
-    fp32 vx_now;                      //µ◊≈ÃÀŸ∂» «∞Ω¯∑ΩœÚ «∞Œ™’˝£¨µ•Œª rpm
-	fp32 vy_now;                      //µ◊≈ÃÀŸ∂» ◊Û”“∑ΩœÚ ◊ÛŒ™’˝  µ•Œª rpm
-	fp32 wz_now;                      //µ◊≈Ã–˝◊™Ω«ÀŸ∂»£¨ƒÊ ±’ÎŒ™’˝ µ•Œª rad/s
-	fp32 vx_set;                      //µ◊≈Ã…Ë∂®ÀŸ∂» «∞Ω¯∑ΩœÚ «∞Œ™’˝£¨µ•Œª rpm
-	fp32 vy_set;                      //µ◊≈Ã…Ë∂®ÀŸ∂» ◊Û”“∑ΩœÚ ◊ÛŒ™’˝£¨µ•Œª rpm
-	fp32 wz_set;                      //µ◊≈Ã…Ë∂®–˝◊™Ω«ÀŸ∂»£¨ƒÊ ±’ÎŒ™’˝ µ•Œª rpm
-	fp32 relative_angle;              //µ◊≈Ã”Î‘∆Ã®µƒœ‡∂‘Ω«∂»£¨µ•Œª rad
-	fp32 set_relative_angle;          //…Ë÷√œ‡∂‘‘∆Ã®øÿ÷∆Ω«∂»£¨µ•Œª rad
+    lpf_t chassis_cmd_vx_lpf;  /* Â∫ïÁõò x ÈÄüÂ∫¶‰ΩéÈÄö */
+    lpf_t chassis_cmd_vy_lpf;  /* Â∫ïÁõò y ÈÄüÂ∫¶‰ΩéÈÄö */
+    lpf_t chassis_cmd_wz_lpf;  /* Â∫ïÁõò z ÈÄüÂ∫¶‰ΩéÈÄö */
 
-    fp32 vx_nomal_speed;  //’˝≥£ÀŸ∂»
-    fp32 vy_nomal_speed;  //’˝≥£ÀŸ∂»
-    fp32 wz_nomal_speed;  //’˝≥£ÀŸ∂» 
+    fp32 vx_now;               /* ÂâçËøõÊñπÂêëÔºåÂâç‰∏∫Ê≠£ÔºåÂçï‰Ωç rpm */
+    fp32 vy_now;               /* Â∑¶Âè≥ÊñπÂêëÔºåÂ∑¶‰∏∫Ê≠£ÔºåÂçï‰Ωç rpm */
+    fp32 wz_now;               /* ÊóãËΩ¨ËßíÈÄüÂ∫¶ÔºåÈÄÜÊó∂Èíà‰∏∫Ê≠£ÔºåÂçï‰Ωç rad/s */
+    fp32 vx_set;
+    fp32 vy_set;
+    fp32 wz_set;
+    fp32 relative_angle;       /* Â∫ïÁõò‰∏é‰∫ëÂè∞Áõ∏ÂØπËßíÂ∫¶ÔºåÂçï‰Ωç rad */
+    fp32 set_relative_angle;
 
-    fp32 vx_max_speed;  //«∞Ω¯∑ΩœÚ◊Ó¥ÛÀŸ∂» 	
-    fp32 vy_max_speed;  //◊Û∑ΩœÚ◊Ó¥ÛÀŸ∂» 
-    fp32 wz_max_speed;  //–˝◊™◊Ó¥ÛÀŸ∂»
+    fp32 vx_nomal_speed;
+    fp32 vy_nomal_speed;
+    fp32 wz_nomal_speed;
 
-	fp32 vx_add_speed;  //x∑ΩœÚÀŸ∂»‘ˆ¡ø 
-	fp32 vy_add_speed;  //y∑ΩœÚÀŸ∂»‘ˆ¡ø 
-	fp32 wz_add_speed;  //z–˝◊™ÀŸ∂»‘ˆ¡ø
+    fp32 vx_max_speed;
+    fp32 vy_max_speed;
+    fp32 wz_max_speed;
 
-    fp32 chassis_power;          //µ◊≈Ãµ±«∞œ˚∫ƒπ¶¬ 
-	fp32 chassis_power_use;      //µ◊≈ÃÀ˘–Ëœ˚∫ƒπ¶¬ 
-    fp32 chassis_buffer_rm;      //≤√≈–œµÕ≥µ◊≈Ãª∫≥Â…œœﬁ
-    fp32 chassis_buffer_user;    //”√ªß π”√µ◊≈Ãª∫≥Â…œœﬁ
-    fp32 chassis_power_max;      //πÊ‘Úœ¬◊Ó¥Ûø…”√π¶¬ 
-    fp32 chassis_power_user_can; // µº …œ”√ªßø…”√π¶¬ 
+    fp32 vx_add_speed;
+    fp32 vy_add_speed;
+    fp32 wz_add_speed;
 
-    fp32 chassis_action_vx_error;  //x∑ΩœÚ∂Ø◊˜ŒÛ≤Ó
-    fp32 chassis_action_vy_error;  //y∑ΩœÚ∂Ø◊˜ŒÛ≤Ó
-    fp32 chassis_action_wz_error;  //z∑ΩœÚ∂Ø◊˜ŒÛ≤Ó
-    fp32 chassis_action_vx_gain;  //x∑ΩœÚ∂Ø◊˜’º±»
-    fp32 chassis_action_vy_gain;  //y∑ΩœÚ∂Ø◊˜’º±»
-    fp32 chassis_action_wz_gain;  //z∑ΩœÚ∂Ø◊˜’º±»
-	
-	int16_t gimbal_change_chassis_time;  //“ªº¸µÙÕ∑ ±º‰
-	
-	fp32 chassis_x_slope_accl;
-	fp32 chassis_x_slope_rate;
-	fp32 chassis_y_slope_accl;
-	fp32 chassis_y_slope_rate;
-	fp32 chassis_w_slope_accl;
-	fp32 chassis_w_slope_rate;
-	
-	fp32 chassis_gyro;
+    fp32 chassis_power;          /* Â∫ïÁõòÂΩìÂâçÊ∂àËÄóÂäüÁéá */
+    fp32 chassis_power_use;      /* Â∫ïÁõòÊâÄÈúÄÊ∂àËÄóÂäüÁéá */
+    fp32 chassis_buffer_rm;      /* Ë£ÅÂà§Á≥ªÁªüÂ∫ïÁõòÁºìÂÜ≤‰∏äÈôê */
+    fp32 chassis_buffer_user;    /* Áî®Êà∑‰ΩøÁî®Â∫ïÁõòÁºìÂÜ≤‰∏äÈôê */
+    fp32 chassis_power_max;      /* ËßÑÂàô‰∏ãÊúÄÂ§ßÂèØÁî®ÂäüÁéá */
+    fp32 chassis_power_user_can; /* ÂÆûÈôÖ‰∏äÁî®Êà∑ÂèØÁî®ÂäüÁéá */
+
+    fp32 chassis_action_vx_error;
+    fp32 chassis_action_vy_error;
+    fp32 chassis_action_wz_error;
+    fp32 chassis_action_vx_gain;
+    fp32 chassis_action_vy_gain;
+    fp32 chassis_action_wz_gain;
+
+    int16_t gimbal_change_chassis_time;  /* ‰∏ÄÈîÆÊéâÂ§¥Êó∂Èó¥ */
+
+    fp32 chassis_x_slope_accl;
+    fp32 chassis_x_slope_rate;
+    fp32 chassis_y_slope_accl;
+    fp32 chassis_y_slope_rate;
+    fp32 chassis_w_slope_accl;
+    fp32 chassis_w_slope_rate;
+
+    fp32 chassis_gyro;
 } chassis_control_t;
 
-extern void Chassis_Task(void const * argument);
+extern void Chassis_Task(void *argument);
+
 #endif

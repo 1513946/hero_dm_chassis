@@ -1,6 +1,6 @@
 #include "ins_task.h"
 #include "main.h"
-#include "stm32f4xx_hal.h"
+
 #include "can_user.h"
 #include "pid.h"
 #include "cmsis_os.h"
