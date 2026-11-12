@@ -66,6 +66,14 @@ void Error_Handler(void);
 #define CS1_GYRO_Pin        GPIO_PIN_3
 #define CS1_GYRO_GPIO_Port  GPIOC
 
+/* BMI088 data-ready interrupt pins (EXTI15_10) */
+#define INT1_ACCEL_Pin       GPIO_PIN_10
+#define INT1_ACCEL_GPIO_Port GPIOE
+#define INT1_ACCEL_EXTI_IRQn EXTI15_10_IRQn
+#define INT1_GYRO_Pin        GPIO_PIN_12
+#define INT1_GYRO_GPIO_Port  GPIOE
+#define INT1_GYRO_EXTI_IRQn  EXTI15_10_IRQn
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

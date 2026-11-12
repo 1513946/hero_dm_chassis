@@ -52,6 +52,9 @@ hero_dm_chassis\chassis_task.o: ..\balance_application\RM_referee\protocol.h
 hero_dm_chassis\chassis_task.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
 hero_dm_chassis\chassis_task.o: ..\balance_application\control_alg\pid\pid.h
 hero_dm_chassis\chassis_task.o: ..\balance_bsp\crg_filter\crg_filter.h
-hero_dm_chassis\chassis_task.o: ..\balance_application\all_task\chassis_stubs.h
+hero_dm_chassis\chassis_task.o: ..\balance_application\all_task\ins_task.h
+hero_dm_chassis\chassis_task.o: ..\balance_bsp\scm_bsp\imu_driver\ist8310\ist8310driver.h
+hero_dm_chassis\chassis_task.o: ..\balance_bsp\scm_bsp\imu_driver\bm1088\BMI088driver.h
+hero_dm_chassis\chassis_task.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os.h
 hero_dm_chassis\chassis_task.o: ../Drivers/CMSIS/RTOS2/Include/cmsis_os2.h
 hero_dm_chassis\chassis_task.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdlib.h

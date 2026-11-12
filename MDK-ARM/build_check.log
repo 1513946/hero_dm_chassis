@@ -1,4 +1,8 @@
 *** Using Compiler 'V5.06 update 7 (build 960)', folder: 'D:\Keil5\ARM\ARMCC\Bin'
 Build target 'hero_dm_chassis'
+compiling ins_task.c...
+linking...
+Program Size: Code=53724 RO-data=1448 RW-data=468 ZI-data=33372  
+FromELF: creating hex file...
 "hero_dm_chassis\hero_dm_chassis.axf" - 0 Error(s), 0 Warning(s).
-Build Time Elapsed:  00:00:01
+Build Time Elapsed:  00:00:05

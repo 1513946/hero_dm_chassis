@@ -339,7 +339,7 @@
               <MiscControls></MiscControls>
               <Define>USE_PWR_LDO_SUPPLY,USE_HAL_DRIVER,STM32H723xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include;../Middlewares/ST/ARM/DSP/Inc;..\balance_bsp\math_bsp;..\balance_bsp\scm_bsp\imu_driver\bm1088;..\balance_bsp\crg_filter;..\balance_bsp\scm_bsp\can_init;..\balance_application\can;..\balance_application\control_alg\pid;..\balance_application\all_task;..\balance_application\RM_referee;..\balance_application\remote</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include;../Middlewares/ST/ARM/DSP/Inc;..\balance_bsp\math_bsp;..\balance_bsp\scm_bsp\imu_driver\bm1088;..\balance_bsp\crg_filter;..\balance_bsp\scm_bsp\can_init;..\balance_application\can;..\balance_application\control_alg\pid;..\balance_application\all_task;..\balance_application\RM_referee;..\balance_application\remote;..\algorithm;..\balance_bsp\scm_bsp\imu_driver\ist8310</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -1423,14 +1423,14 @@
               <FilePath>..\balance_application\all_task\chassis_task.h</FilePath>
             </File>
             <File>
-              <FileName>chassis_stubs.c</FileName>
+              <FileName>ins_task.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\balance_application\all_task\chassis_stubs.c</FilePath>
+              <FilePath>..\balance_application\all_task\ins_task.c</FilePath>
             </File>
             <File>
-              <FileName>chassis_stubs.h</FileName>
+              <FileName>ins_task.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\balance_application\all_task\chassis_stubs.h</FilePath>
+              <FilePath>..\balance_application\all_task\ins_task.h</FilePath>
             </File>
           </Files>
         </Group>
@@ -1451,6 +1451,18 @@
         </Group>
         <Group>
           <GroupName>ahrs</GroupName>
+          <Files>
+            <File>
+              <FileName>MahonyAHRS.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\algorithm\MahonyAHRS.c</FilePath>
+            </File>
+            <File>
+              <FileName>MahonyAHRS.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\algorithm\MahonyAHRS.h</FilePath>
+            </File>
+          </Files>
         </Group>
         <Group>
           <GroupName>Middlewares/Library/DSP Library/DSP Library</GroupName>

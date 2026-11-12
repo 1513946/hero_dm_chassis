@@ -1,7 +1,7 @@
 #include "chassis_task.h"
 #include "main.h"
 #include "can_user.h"
-#include "chassis_stubs.h"
+#include "ins_task.h"
 #include "cmsis_os2.h"
 #include "pid.h"
 #include "math.h"
@@ -146,7 +146,7 @@ static void Chassis_Init(chassis_control_t *mini_chassis_init)
     pid_init(&mini_chassis_init->rm_buffer_control_pid, PID_POSITION, chassis_buffer_pid,
              BUFFER_PID_MAX_OUT, BUFFER_PID_MAX_I_OUT);
 
-    /* INS 陀螺指针（旁路：返回恒 0，见 chassis_stubs.c） */
+    /* INS 陀螺指针（BMI088 已接入，见 ins_task.c） */
     mini_chassis_init->chassis_ins_point = get_gyro_data_point();
 
     /* 遥控数据走云台 CAN(0x307)，板载 SBUS 未启用，指针置空 */
