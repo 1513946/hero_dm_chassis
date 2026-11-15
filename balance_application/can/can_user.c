@@ -19,21 +19,6 @@
         (ptr)->temperate     = (data)[6];                               \
     }
 
-/* 云台板 0x307 数据解析（遥控量 + 各种模式位） */
-#define get_gimbal_measure(ptr, data)                                   \
-    {                                                                   \
-        (ptr)->x_rc_data       = ((data)[0] << 8) | ((data)[1]);        \
-        (ptr)->y_rc_data       = ((data)[2] << 8) | ((data)[3]);        \
-        (ptr)->x_key_data      = ((data)[4] >> 6) & 3;                  \
-        (ptr)->y_key_data      = ((data)[4] >> 4) & 3;                  \
-        (ptr)->chassis_mode    = ((data)[5] >> 6) & 3;                  \
-        (ptr)->cap_mode        = ((data)[5] >> 5) & 1;                  \
-        (ptr)->top_mode        = ((data)[5] >> 4) & 1;                  \
-        (ptr)->follow_mode     = ((data)[5] >> 3) & 1;                  \
-        (ptr)->follow_mode_last= ((data)[5] >> 2) & 1;                  \
-        (ptr)->key_control     = ((data)[5] >> 1) & 1;                  \
-    }
-
 /* 超电 0x304 电容电压解析 */
 #define get_cap_measure(ptr, data)                                      \
     {                                                                   \
@@ -50,10 +35,14 @@ volatile uint32_t chassis_top_rx_bad_frame_count = 0;
 volatile uint32_t chassis_can_rx_error_count   = 0;
 volatile uint8_t  chassis_top_rx_last_off_flags = 0;
 
-chassis_c_get_data_t mini_chassis =
-{
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-};
+#define GIMBAL_CHASSIS_COMMAND_TIMEOUT_MS 100U
+#define CHASSIS_COMMAND_CLIMB (1U << 2)
+#define CHASSIS_COMMAND_STOP (1U << 3)
+#define CHASSIS_COMMAND_REMOTE_VALID (1U << 4)
+#define CHASSIS_COMMAND_LAYOUT_V1 (1U << 5)
+
+volatile chassis_c_get_data_t mini_chassis;
+static volatile uint32_t gimbal_chassis_command_received_at_ms;
 
 super_cap_t super_cap;
 
@@ -64,7 +53,51 @@ static uint8_t chassis_send_cap_data[8];
 static uint8_t chassis_send_ramp_pitch[4];
 
 /* 云台 CAN 接收帧计数（调试用） */
-int from_yuntai_can = 0;
+volatile uint32_t from_yuntai_can = 0;
+
+/* 与云台 CAN_gimbal_send_chassis() 的 0x307 布局一致。 */
+static void receive_gimbal_chassis_command(const uint8_t data[8])
+{
+    chassis_c_get_data_t command = {0};
+    const uint8_t status_flags = data[6];
+    const bool uses_climb_protocol = (status_flags & CHASSIS_COMMAND_LAYOUT_V1) != 0U;
+
+    if (mini_chassis.uses_climb_protocol && !uses_climb_protocol)
+    {
+        return;
+    }
+
+    command.uses_climb_protocol = uses_climb_protocol;
+    if (!uses_climb_protocol ||
+        (status_flags & (CHASSIS_COMMAND_STOP | CHASSIS_COMMAND_REMOTE_VALID)) == CHASSIS_COMMAND_REMOTE_VALID)
+    {
+        command.x_rc_data = (int16_t)((data[0] << 8) | data[1]);
+        command.y_rc_data = (int16_t)((data[2] << 8) | data[3]);
+        command.chassis_mode = (data[5] >> 6) & 3U;
+        command.cap_mode = (data[5] >> 5) & 1U;
+
+        if (uses_climb_protocol)
+        {
+            command.climb_mode = (status_flags & CHASSIS_COMMAND_CLIMB) != 0U;
+            command.climb_group = status_flags & 3U;
+            command.climb_side = status_flags >> 6;
+            command.joint_motion_request = (int8_t)data[7];
+        }
+        else
+        {
+            command.x_key_data = (data[4] >> 6) & 3U;
+            command.y_key_data = (data[4] >> 4) & 3U;
+            command.top_mode = (data[5] >> 4) & 1U;
+            command.follow_mode = (data[5] >> 3) & 1U;
+            command.follow_mode_last = (data[5] >> 2) & 1U;
+            command.key_control = (data[5] >> 1) & 1U;
+        }
+    }
+
+    mini_chassis = command;
+    gimbal_chassis_command_received_at_ms = HAL_GetTick();
+    from_yuntai_can++;
+}
 
 /* 9025 电机（云台）编码器解析：只取机械角 */
 void get_9025_motor_ecd(motor_measure_t *ptr, uint8_t *data)
@@ -171,8 +204,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
                     chassis_top_rx_off_count++;
                     chassis_top_rx_last_off_flags = rx_data[5];
                 }
-                from_yuntai_can++;
-                get_gimbal_measure(&mini_chassis, rx_data);
+                receive_gimbal_chassis_command(rx_data);
                 break;
             default:
                 break;
@@ -270,7 +302,20 @@ const super_cap_t *get_super_cap_measure_point(void)
     return &super_cap;
 }
 
-const chassis_c_get_data_t *get_c_gimbal_data_point(void)
+void read_gimbal_chassis_command(chassis_c_get_data_t *command)
 {
-    return &mini_chassis;
+    const uint32_t interrupt_mask = __get_PRIMASK();
+    uint32_t command_age_ms;
+
+    __disable_irq();
+    *command = mini_chassis;
+    command_age_ms = HAL_GetTick() - gimbal_chassis_command_received_at_ms;
+    __set_PRIMASK(interrupt_mask);
+
+    if (command_age_ms >= GIMBAL_CHASSIS_COMMAND_TIMEOUT_MS)
+    {
+        const bool uses_climb_protocol = command->uses_climb_protocol;
+        *command = (chassis_c_get_data_t){0};
+        command->uses_climb_protocol = uses_climb_protocol;
+    }
 }

@@ -11,6 +11,13 @@
 
 /* ---- 旁路开关：外设尚未接好时把对应计算短路，代码保留 ---- */
 #define CHASSIS_BYPASS_REFEREE 1   /* 无裁判系统：跳过功率限制 */
+#define CLIMB_WHEEL_SPEED_SCALE 0.15f
+
+/* 位号与 dm_config[] 一致。上车前核对 CAN ID 与实际安装位置。 */
+#define FRONT_LEFT_MOTOR  (1U << 0)
+#define FRONT_RIGHT_MOTOR (1U << 1)
+#define REAR_LEFT_MOTOR   (1U << 2)
+#define REAR_RIGHT_MOTOR  (1U << 3)
 
 #define Remote_Deadband_Limit(mag_input, msg_output, dead_control)   \
 {                                                                    \
@@ -56,6 +63,41 @@ static fp32 Motor_Ecd_To_Angle(uint16_t ecd, uint16_t ecd_zero_angle_set);
 fp32 sin_yaw = 0.0f;
 fp32 cos_yaw = 0.0f;
 chassis_control_t hero_chassis;
+static chassis_c_get_data_t gimbal_chassis_command;
+
+static uint8_t select_climb_motors(const chassis_c_get_data_t *command)
+{
+    uint8_t group_mask;
+
+    if (!command->climb_mode)
+    {
+        return 0U;
+    }
+
+    switch (command->climb_group)
+    {
+    case CLIMB_FRONT_GROUP:
+        group_mask = FRONT_LEFT_MOTOR | FRONT_RIGHT_MOTOR;
+        break;
+    case CLIMB_REAR_GROUP:
+        group_mask = REAR_LEFT_MOTOR | REAR_RIGHT_MOTOR;
+        break;
+    default:
+        return 0U;
+    }
+
+    switch (command->climb_side)
+    {
+    case CLIMB_BOTH_SIDES:
+        return group_mask;
+    case CLIMB_LEFT_SIDE:
+        return group_mask & (FRONT_LEFT_MOTOR | REAR_LEFT_MOTOR);
+    case CLIMB_RIGHT_SIDE:
+        return group_mask & (FRONT_RIGHT_MOTOR | REAR_RIGHT_MOTOR);
+    default:
+        return 0U;
+    }
+}
 
 void Chassis_Task(void *argument)
 {
@@ -72,6 +114,7 @@ void Chassis_Task(void *argument)
 
     for (;;)
     {
+        read_gimbal_chassis_command(&gimbal_chassis_command);
         Chassis_Set_Mode(&hero_chassis);
         Chassis_Mode_Change_Feedback_Change(&hero_chassis);
         Chassis_Feedback_Updata(&hero_chassis);
@@ -81,7 +124,9 @@ void Chassis_Task(void *argument)
                         hero_chassis.chassis_motor[1].give_current,
                         hero_chassis.chassis_motor[2].give_current,
                         hero_chassis.chassis_motor[3].give_current);
-        dm_motor_test_step();
+        dm_motor_control_step(gimbal_chassis_command.uses_climb_protocol,
+                              select_climb_motors(&gimbal_chassis_command),
+                              gimbal_chassis_command.joint_motion_request);
         osDelay(1);
     }
 }
@@ -136,7 +181,7 @@ static void Chassis_Init(chassis_control_t *mini_chassis_init)
     mini_chassis_init->gimbal_yaw_motor = get_motor_gimbal_yaw_measure_point();
 
     /* 云台板数据指针初始化 */
-    mini_chassis_init->chassis_gimbal_can_data = get_c_gimbal_data_point();
+    mini_chassis_init->chassis_gimbal_can_data = &gimbal_chassis_command;
 
     /* PID 初始化 */
     for (int i = 0; i < 4; i++)
@@ -179,25 +224,34 @@ static void Chassis_Init(chassis_control_t *mini_chassis_init)
 
 static void Chassis_Set_Mode(chassis_control_t *mini_chassis_set_mode)
 {
+    const chassis_c_get_data_t *command;
+
     if (mini_chassis_set_mode == NULL)
     {
         return;
     }
 
-    /* 底盘模式 */
-    if (mini_chassis_set_mode->chassis_gimbal_can_data->chassis_mode == 0)
+    command = mini_chassis_set_mode->chassis_gimbal_can_data;
+
+    /* 爬阶时只在麦轮档驱动车轮，摆臂档给麦轮零电流。 */
+    if (command->climb_mode)
+    {
+        mini_chassis_set_mode->chassis_mode = command->climb_group == CLIMB_MECANUM_WHEELS
+            ? CHASSIS_NO_FOLLOW_GIMBAL : CHASSIS_ZERO_FORCE;
+    }
+    else if (command->chassis_mode == 0)
     {
         mini_chassis_set_mode->chassis_mode = CHASSIS_ZERO_FORCE;
     }
-    else if (mini_chassis_set_mode->chassis_gimbal_can_data->chassis_mode == 1)
+    else if (command->chassis_mode == 1)
     {
         mini_chassis_set_mode->chassis_mode = CHASSIS_NO_MOVE;
     }
-    else if (mini_chassis_set_mode->chassis_gimbal_can_data->chassis_mode == 2)
+    else if (command->chassis_mode == 2)
     {
         mini_chassis_set_mode->chassis_mode = CHASSIS_NO_FOLLOW_GIMBAL;
     }
-    else if (mini_chassis_set_mode->chassis_gimbal_can_data->chassis_mode == 3)
+    else if (command->chassis_mode == 3)
     {
         mini_chassis_set_mode->chassis_mode = CHASSIS_FOLLOW_GIMBAL;
     }
@@ -505,8 +559,11 @@ static void Chassis_Action_To_Control_Cacl(chassis_control_t *mini_chassis_actio
 
 static void Chassis_Rc_To_Control_Xy(chassis_control_t *mini_chassis_rc_to_control_cacl)
 {
-    mini_chassis_rc_to_control_cacl->vx_nomal_speed = mini_chassis_rc_to_control_cacl->chassis_gimbal_can_data->x_rc_data * RC_X_SENSE;
-    mini_chassis_rc_to_control_cacl->vy_nomal_speed = mini_chassis_rc_to_control_cacl->chassis_gimbal_can_data->y_rc_data * RC_Y_SENSE;
+    const chassis_c_get_data_t *command = mini_chassis_rc_to_control_cacl->chassis_gimbal_can_data;
+    const float speed_scale = command->climb_mode ? CLIMB_WHEEL_SPEED_SCALE : 1.0f;
+
+    mini_chassis_rc_to_control_cacl->vx_nomal_speed = command->x_rc_data * RC_X_SENSE * speed_scale;
+    mini_chassis_rc_to_control_cacl->vy_nomal_speed = command->y_rc_data * RC_Y_SENSE * speed_scale;
 }
 
 static void Chassis_Keyboard_To_Control_Xy(chassis_control_t *mini_chassis_keyboard_to_control_cacl)

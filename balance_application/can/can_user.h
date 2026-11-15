@@ -50,6 +50,21 @@ typedef struct can_user
     fp32 V_cap_value;       /* 电容电压 */
 } super_cap_t;
 
+/* 云台 V1 协议 0x307，data[6] 的机构和侧别编码。 */
+enum
+{
+    CLIMB_FRONT_GROUP = 0,
+    CLIMB_MECANUM_WHEELS = 1,
+    CLIMB_REAR_GROUP = 2
+};
+
+enum
+{
+    CLIMB_BOTH_SIDES = 0,
+    CLIMB_LEFT_SIDE = 1,
+    CLIMB_RIGHT_SIDE = 2
+};
+
 /* 云台板经 0x307 下发的数据（底盘模式和遥控量都从这里来） */
 typedef struct
 {
@@ -63,6 +78,11 @@ typedef struct
     uint8_t follow_mode;      /* 一键掉头 */
     uint8_t follow_mode_last; /* 一键掉头上一次状态 */
     uint8_t key_control;      /* 键盘控制（比赛模式） */
+    bool uses_climb_protocol;
+    bool climb_mode;
+    uint8_t climb_group;
+    uint8_t climb_side;
+    int8_t joint_motion_request; /* -100 到 100，0 保持目标角。 */
 } chassis_c_get_data_t;
 
 /* 0x307 接收诊断计数器，供 Keil Watch 查看 */
@@ -83,6 +103,6 @@ extern void CAN_cmd_chassis_read(uint8_t id, int16_t current);
 extern const motor_measure_t *get_motor_chassis_motor_measure_point(uint8_t i);
 extern const motor_measure_t *get_motor_gimbal_yaw_measure_point(void);
 extern const super_cap_t *get_super_cap_measure_point(void);
-extern const chassis_c_get_data_t *get_c_gimbal_data_point(void);
+void read_gimbal_chassis_command(chassis_c_get_data_t *command);
 
 #endif

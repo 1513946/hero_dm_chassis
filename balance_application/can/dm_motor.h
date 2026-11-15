@@ -1,6 +1,7 @@
 #ifndef DM_MOTOR_H
 #define DM_MOTOR_H
 
+#include <stdbool.h>
 #include "fdcan.h"
 
 #define DM_MOTOR_COUNT 4U
@@ -72,6 +73,7 @@ typedef struct
 extern volatile dm_test_t dm_test;
 extern volatile dm_feedback_t dm_feedback[DM_MOTOR_COUNT];
 extern volatile dm_can_diag_t dm_can_diag;
+extern volatile uint8_t dm_remote_active_mask;
 
 HAL_StatusTypeDef dm_motor_can_start(void);
 void dm_motor_can_rx_irq(FDCAN_HandleTypeDef *hfdcan, uint32_t rx_interrupts);
@@ -82,6 +84,7 @@ HAL_StatusTypeDef dm_motor_disable(uint8_t index);
 HAL_StatusTypeDef dm_motor_request_feedback(uint8_t index);
 HAL_StatusTypeDef dm_motor_send_mit(uint8_t index, float position, float velocity,
                                    float kp, float kd, float torque);
-void dm_motor_test_step(void);
+void dm_motor_control_step(bool use_remote_control, uint8_t selected_motors,
+                           int8_t joint_motion_request);
 
 #endif

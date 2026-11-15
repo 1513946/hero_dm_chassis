@@ -14,6 +14,7 @@
 #define DM_TEST_RAMP_RAD_S 0.10f
 #define DM_TEST_KP 10.0f
 #define DM_TEST_KD 0.25f
+#define DM_REMOTE_POSITION_ERROR_RAD 0.10f
 
 typedef struct
 {
@@ -22,22 +23,24 @@ typedef struct
     float pmax;
     float vmax;
     float tmax;
+    float extension_direction;
 } dm_config_t;
 
-/* DaMiao SDK mapping defaults. Match each row to the actual drive readback.
- * Indexes 0 and 1: DM-J8009P-2EC. Indexes 2 and 3: DM-J4340-2EC.
+/* 核对各电机的 MIT 映射值。最后一列是伸出方向，反向安装时改为 -1。
+ * 下标 0、1 对应两台 8009P，下标 2、3 对应两台 4340。
  */
 static const dm_config_t dm_config[DM_MOTOR_COUNT] =
 {
-    {0x01U, 0x11U, 12.5f, 45.0f, 54.0f},
-    {0x02U, 0x12U, 12.5f, 45.0f, 54.0f},
-    {0x03U, 0x13U, 12.5f, 10.0f, 28.0f},
-    {0x04U, 0x14U, 12.5f, 10.0f, 28.0f},
+    {0x01U, 0x11U, 12.5f, 45.0f, 54.0f, 1.0f},
+    {0x02U, 0x12U, 12.5f, 45.0f, 54.0f, 1.0f},
+    {0x03U, 0x13U, 12.5f, 10.0f, 28.0f, 1.0f},
+    {0x04U, 0x14U, 12.5f, 10.0f, 28.0f, 1.0f},
 };
 
 volatile dm_test_t dm_test;
 volatile dm_feedback_t dm_feedback[DM_MOTOR_COUNT];
 volatile dm_can_diag_t dm_can_diag;
+volatile uint8_t dm_remote_active_mask;
 
 static uint32_t phase_start_ms;
 static uint32_t last_step_ms;
@@ -45,6 +48,9 @@ static uint8_t next_poll_index;
 static uint32_t feedback_baseline[DM_MOTOR_COUNT];
 static float initial_angle[DM_MOTOR_COUNT];
 static float requested_offset[DM_MOTOR_COUNT];
+static float remote_target_position[DM_MOTOR_COUNT];
+static uint8_t remote_disable_sent_mask;
+static uint32_t remote_stop_feedback_count[DM_MOTOR_COUNT];
 
 HAL_StatusTypeDef dm_motor_can_start(void)
 {
@@ -519,7 +525,90 @@ static void dm_test_disable_step(uint32_t now, const dm_feedback_t *snapshot)
     }
 }
 
-void dm_motor_test_step(void)
+static void stop_remote_motor(uint8_t index, bool feedback_is_fresh,
+                              const dm_feedback_t *feedback)
+{
+    const uint8_t motor_bit = 1U << index;
+
+    if ((dm_remote_active_mask & motor_bit) == 0U)
+    {
+        return;
+    }
+
+    if ((remote_disable_sent_mask & motor_bit) != 0U)
+    {
+        if (feedback_is_fresh && feedback->state == 0U &&
+            feedback->rx_count != remote_stop_feedback_count[index])
+        {
+            dm_remote_active_mask &= ~motor_bit;
+            remote_disable_sent_mask &= ~motor_bit;
+        }
+        else if (feedback_is_fresh)
+        {
+            (void)dm_motor_disable(index);
+        }
+    }
+    else if (dm_motor_disable(index) == HAL_OK)
+    {
+        remote_stop_feedback_count[index] = feedback->rx_count;
+        remote_disable_sent_mask |= motor_bit;
+    }
+}
+
+static void control_remote_motors(uint8_t selected_motors, int8_t joint_motion_request,
+                                  uint32_t now, const dm_feedback_t *feedback)
+{
+    const float motion_fraction = (float)joint_motion_request / 100.0f;
+    const float position_step = motion_fraction * DM_TEST_RAMP_RAD_S * (DM_TEST_PERIOD_MS / 1000.0f);
+    uint8_t feedback_request_mask = 0U;
+    uint8_t index;
+
+    for (index = 0U; index < DM_MOTOR_COUNT; index++)
+    {
+        const uint8_t motor_bit = 1U << index;
+        const bool selected = (selected_motors & motor_bit) != 0U;
+        const bool feedback_is_fresh = feedback[index].rx_count != 0U &&
+            now - feedback[index].last_rx_ms < DM_TEST_FEEDBACK_MS;
+
+        if (!selected || !feedback_is_fresh || feedback[index].state > 1U ||
+            (remote_disable_sent_mask & motor_bit) != 0U)
+        {
+            stop_remote_motor(index, feedback_is_fresh, &feedback[index]);
+            if (selected)
+            {
+                feedback_request_mask |= motor_bit;
+            }
+            continue;
+        }
+
+        if ((dm_remote_active_mask & motor_bit) == 0U || feedback[index].state == 0U)
+        {
+            remote_target_position[index] = feedback[index].position_rad;
+            if (dm_motor_enable(index) == HAL_OK)
+            {
+                dm_remote_active_mask |= motor_bit;
+            }
+            feedback_request_mask |= motor_bit;
+            continue;
+        }
+
+        if (joint_motion_request != 0)
+        {
+            const float target = remote_target_position[index] + position_step * dm_config[index].extension_direction;
+            const float current_position = feedback[index].position_rad;
+
+            /* 卡住时也不累积过大的位置误差。 */
+            remote_target_position[index] = fminf(current_position + DM_REMOTE_POSITION_ERROR_RAD,
+                                                   fmaxf(current_position - DM_REMOTE_POSITION_ERROR_RAD, target));
+        }
+        (void)dm_motor_send_mit(index, remote_target_position[index], 0.0f, DM_TEST_KP, DM_TEST_KD, 0.0f);
+    }
+
+    dm_poll_one(feedback_request_mask);
+}
+
+void dm_motor_control_step(bool use_remote_control, uint8_t selected_motors,
+                           int8_t joint_motion_request)
 {
     dm_feedback_t snapshot[DM_MOTOR_COUNT];
     FDCAN_ErrorCountersTypeDef errors;
@@ -558,6 +647,17 @@ void dm_motor_test_step(void)
             dm_test_disable_step(now, snapshot);
         }
         return;
+    }
+
+    if (use_remote_control)
+    {
+        dm_test.run = 0U;
+        dm_test.motor_mask = 0U;
+        if (dm_test.state == DM_TEST_IDLE && dm_test.disable_pending_mask == 0U)
+        {
+            control_remote_motors(selected_motors, joint_motion_request, now, snapshot);
+            return;
+        }
     }
 
     if ((dm_test.state == DM_TEST_ENABLING || dm_test.state == DM_TEST_MOVING) && dm_test.run == 0U)
