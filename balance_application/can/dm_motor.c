@@ -524,7 +524,7 @@ static void dm_test_disable_step(uint32_t now, const dm_feedback_t *snapshot)
         dm_test.state = DM_TEST_IDLE;
     }
 }
-
+//
 static void stop_remote_motor(uint8_t index, bool feedback_is_fresh,
                               const dm_feedback_t *feedback)
 {
