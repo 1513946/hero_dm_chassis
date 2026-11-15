@@ -1,4 +1,5 @@
 #include "can_user.h"
+#include "dm_motor.h"
 #include "main.h"
 #include "fdcan.h"
 #include "string.h"
@@ -93,14 +94,21 @@ static void fdcan_send(FDCAN_HandleTypeDef *hfdcan, uint32_t std_id, uint8_t dlc
 }
 
 /*
- * FDCAN RX FIFO0 回调（hfdcan1 / hfdcan2 共用）。
+ * FDCAN RX FIFO0 回调。
  * 底盘 CAN：0x201~0x204 电机反馈、0x304 超电；
  * 云台 CAN：0x200 9025 编码器、0x307 云台数据。
+ * 第三路 CAN 交由达妙电机驱动处理。
  */
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
     FDCAN_RxHeaderTypeDef rx_header;
     uint8_t rx_data[8];
+
+    if (hfdcan == &hfdcan3)
+    {
+        dm_motor_can_rx_irq(hfdcan, RxFifo0ITs);
+        return;
+    }
 
     if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) == 0u)
     {

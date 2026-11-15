@@ -1,6 +1,7 @@
 #include "chassis_task.h"
 #include "main.h"
 #include "can_user.h"
+#include "dm_motor.h"
 #include "ins_task.h"
 #include "cmsis_os2.h"
 #include "pid.h"
@@ -64,6 +65,7 @@ void Chassis_Task(void *argument)
 
     /* FDCAN1/FDCAN2 滤波器 + 启动 + 中断（放在任务里，保证 HAL 已初始化完成） */
     can_filter_init();
+    (void)dm_motor_can_start();
 
     Chassis_Init(&hero_chassis);
     osDelay(MINI_CHASSIS_INIT_TIME);
@@ -79,6 +81,7 @@ void Chassis_Task(void *argument)
                         hero_chassis.chassis_motor[1].give_current,
                         hero_chassis.chassis_motor[2].give_current,
                         hero_chassis.chassis_motor[3].give_current);
+        dm_motor_test_step();
         osDelay(1);
     }
 }

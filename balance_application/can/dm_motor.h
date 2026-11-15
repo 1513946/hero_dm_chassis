@@ -1,0 +1,87 @@
+#ifndef DM_MOTOR_H
+#define DM_MOTOR_H
+
+#include "fdcan.h"
+
+#define DM_MOTOR_COUNT 4U
+
+typedef enum
+{
+    DM_TEST_IDLE = 0,
+    DM_TEST_ENABLING,
+    DM_TEST_MOVING,
+    DM_TEST_DISABLING
+} dm_test_state_t;
+
+typedef enum
+{
+    DM_TEST_NO_STOP = 0,
+    DM_TEST_STOP_REQUEST,
+    DM_TEST_STOP_TIME_LIMIT,
+    DM_TEST_STOP_NOT_READY,
+    DM_TEST_STOP_TX_FAILED,
+    DM_TEST_STOP_FEEDBACK_TIMEOUT,
+    DM_TEST_STOP_MOTOR_STATE,
+    DM_TEST_STOP_POSITION,
+    DM_TEST_STOP_BUS_OFF
+} dm_test_stop_t;
+
+typedef struct
+{
+    uint32_t motor_mask;                 /* Watch: bit 0..3 selects motors for polling. */
+    uint32_t run;                        /* Watch: 1 starts one bounded test; 0 stops it. */
+    float offset_rad[DM_MOTOR_COUNT];      /* Watch: latched when the test starts. */
+    dm_test_state_t state;
+    dm_test_stop_t stop_reason;
+    uint32_t active_mask;
+    uint32_t fault_mask;
+    uint32_t disable_pending_mask;
+} dm_test_t;
+
+typedef struct
+{
+    float position_rad;
+    float velocity_rad_s;
+    float torque_nm;
+    uint32_t rx_count;
+    uint32_t last_rx_ms;
+    uint32_t max_move_rx_gap_ms;
+    uint8_t state;
+    uint8_t mos_temp_c;
+    uint8_t coil_temp_c;
+} dm_feedback_t;
+
+typedef struct
+{
+    uint32_t started;
+    uint32_t tx_fifo_full;
+    uint32_t tx_hal_error;
+    uint32_t tx_status_queued[DM_MOTOR_COUNT];
+    uint32_t tx_mit_queued[DM_MOTOR_COUNT];
+    uint32_t rx_fifo_lost_events;
+    uint32_t rx_read_errors;
+    uint32_t rx_invalid;
+    uint32_t protocol_error_events;
+    uint32_t ack_error_events;
+    uint32_t last_error_code;
+    uint32_t bus_off;
+    uint32_t tx_error_counter;
+    uint32_t rx_error_counter;
+} dm_can_diag_t;
+
+extern volatile dm_test_t dm_test;
+extern volatile dm_feedback_t dm_feedback[DM_MOTOR_COUNT];
+extern volatile dm_can_diag_t dm_can_diag;
+
+HAL_StatusTypeDef dm_motor_can_start(void);
+void dm_motor_can_rx_irq(FDCAN_HandleTypeDef *hfdcan, uint32_t rx_interrupts);
+
+/* Transmit functions take a zero-based motor index. Call from a single task. */
+HAL_StatusTypeDef dm_motor_enable(uint8_t index);
+HAL_StatusTypeDef dm_motor_disable(uint8_t index);
+HAL_StatusTypeDef dm_motor_request_feedback(uint8_t index);
+HAL_StatusTypeDef dm_motor_send_mit(uint8_t index, float position, float velocity,
+                                   float kp, float kd, float torque);
+void dm_motor_test_step(void);
+
+#endif

@@ -54,6 +54,7 @@
 "hero_dm_chassis\crg_filter.o"
 "hero_dm_chassis\can_init.o"
 "hero_dm_chassis\can_user.o"
+"hero_dm_chassis\dm_motor.o"
 "hero_dm_chassis\pid.o"
 "hero_dm_chassis\chassis_task.o"
 "hero_dm_chassis\ins_task.o"

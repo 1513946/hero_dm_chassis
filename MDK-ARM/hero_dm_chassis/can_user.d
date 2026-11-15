@@ -49,5 +49,6 @@ hero_dm_chassis\can_user.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_ua
 hero_dm_chassis\can_user.o: ..\balance_application\RM_referee\referee.h
 hero_dm_chassis\can_user.o: ..\balance_application\RM_referee\protocol.h
 hero_dm_chassis\can_user.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
+hero_dm_chassis\can_user.o: ..\balance_application\can\dm_motor.h
 hero_dm_chassis\can_user.o: ../Core/Inc/fdcan.h
 hero_dm_chassis\can_user.o: D:\Keil5\ARM\ARMCC\Bin\..\include\string.h

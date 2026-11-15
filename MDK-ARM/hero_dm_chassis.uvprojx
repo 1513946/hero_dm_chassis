@@ -1403,6 +1403,16 @@
               <FilePath>..\balance_application\can\can_user.h</FilePath>
             </File>
             <File>
+              <FileName>dm_motor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\balance_application\can\dm_motor.c</FilePath>
+            </File>
+            <File>
+              <FileName>dm_motor.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\balance_application\can\dm_motor.h</FilePath>
+            </File>
+            <File>
               <FileName>pid.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\balance_application\control_alg\pid\pid.c</FilePath>
