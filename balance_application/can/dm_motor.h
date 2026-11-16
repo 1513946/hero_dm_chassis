@@ -46,6 +46,7 @@ typedef struct
     float torque_nm;
     uint32_t rx_count;
     uint32_t last_rx_ms;
+    /* 只在 Watch 点动的 MOVING 阶段统计，单位 ms。 */
     uint32_t max_move_rx_gap_ms;
     uint8_t state;
     uint8_t mos_temp_c;
@@ -57,6 +58,7 @@ typedef struct
     uint32_t started;
     uint32_t tx_fifo_full;
     uint32_t tx_hal_error;
+    /* 发送入队次数。按轴查看实际收包时用 dm_feedback[index].rx_count。 */
     uint32_t tx_status_queued[DM_MOTOR_COUNT];
     uint32_t tx_mit_queued[DM_MOTOR_COUNT];
     uint32_t rx_fifo_lost_events;
@@ -73,6 +75,7 @@ typedef struct
 extern volatile dm_test_t dm_test;
 extern volatile dm_feedback_t dm_feedback[DM_MOTOR_COUNT];
 extern volatile dm_can_diag_t dm_can_diag;
+/* 遥控已提交使能的电机位，等待失能确认时仍保留。实际使能看反馈 state。 */
 extern volatile uint8_t dm_remote_active_mask;
 
 HAL_StatusTypeDef dm_motor_can_start(void);
@@ -84,6 +87,7 @@ HAL_StatusTypeDef dm_motor_disable(uint8_t index);
 HAL_StatusTypeDef dm_motor_request_feedback(uint8_t index);
 HAL_StatusTypeDef dm_motor_send_mit(uint8_t index, float position, float velocity,
                                    float kp, float kd, float torque);
+/* 底盘任务周期调用。selected_motors 的 bit0 到 bit3 对应四台电机。 */
 void dm_motor_control_step(bool use_remote_control, uint8_t selected_motors,
                            int8_t joint_motion_request);
 

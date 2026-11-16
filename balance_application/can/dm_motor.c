@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+/* 点动和遥控共用发送周期、目标角变化速率以及 MIT 增益。 */
 #define DM_TEST_ALL_MOTORS ((1U << DM_MOTOR_COUNT) - 1U)
 #define DM_TEST_PERIOD_MS 10U
 #define DM_TEST_FEEDBACK_MS 50U
@@ -9,17 +10,20 @@
 #define DM_TEST_ENABLE_MS 150U
 #define DM_TEST_DISABLE_MS 150U
 #define DM_TEST_DURATION_MS 5000U
+/* 点动输入的偏移上限，以及点动期间的实测位移保护。 */
 #define DM_TEST_OFFSET_RAD 1.0f
 #define DM_TEST_TRAVEL_RAD 0.18f
 #define DM_TEST_RAMP_RAD_S 0.10f
 #define DM_TEST_KP 10.0f
 #define DM_TEST_KD 0.25f
+/* 遥控推杆时限制目标角与反馈角的差，避免卡住后持续累积误差。 */
 #define DM_REMOTE_POSITION_ERROR_RAD 0.10f
 
 typedef struct
 {
     uint16_t can_id;
     uint16_t master_id;
+    /* 协议映射半量程。位置 rad，速度 rad/s，扭矩 N·m。 */
     float pmax;
     float vmax;
     float tmax;
@@ -48,10 +52,12 @@ static uint8_t next_poll_index;
 static uint32_t feedback_baseline[DM_MOTOR_COUNT];
 static float initial_angle[DM_MOTOR_COUNT];
 static float requested_offset[DM_MOTOR_COUNT];
+/* 每轴单独保存遥控目标角及失能前的接收计数，用新反馈确认失能。 */
 static float remote_target_position[DM_MOTOR_COUNT];
 static uint8_t remote_disable_sent_mask;
 static uint32_t remote_stop_feedback_count[DM_MOTOR_COUNT];
 
+/* 配置 CAN3 接收过滤器、通知和启动状态，用于电机通信。 */
 HAL_StatusTypeDef dm_motor_can_start(void)
 {
     FDCAN_FilterTypeDef filter = {0};
@@ -59,6 +65,7 @@ HAL_StatusTypeDef dm_motor_can_start(void)
                                 FDCAN_IT_RX_FIFO0_MESSAGE_LOST |
                                 FDCAN_IT_ARB_PROTOCOL_ERROR | FDCAN_IT_BUS_OFF;
 
+    /* Master ID 是驱动器的反馈帧 ID。配置表按连续 ID 排列。 */
     filter.IdType = FDCAN_STANDARD_ID;
     filter.FilterType = FDCAN_FILTER_RANGE;
     filter.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
@@ -78,6 +85,7 @@ HAL_StatusTypeDef dm_motor_can_start(void)
     return HAL_OK;
 }
 
+/* 统一从 CAN3 发经典 CAN 帧。HAL_OK 表示报文已进入发送队列。 */
 static HAL_StatusTypeDef dm_send(uint16_t id, uint32_t dlc, const uint8_t *data)
 {
     FDCAN_TxHeaderTypeDef header = {0};
@@ -110,6 +118,7 @@ static HAL_StatusTypeDef dm_send(uint16_t id, uint32_t dlc, const uint8_t *data)
     return HAL_OK;
 }
 
+/* 按电机索引发送达妙模式命令；末字节由调用方指定。 */
 static HAL_StatusTypeDef dm_send_mode_command(uint8_t index, uint8_t command)
 {
     const uint8_t data[8] = {0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, command};
@@ -121,16 +130,19 @@ static HAL_StatusTypeDef dm_send_mode_command(uint8_t index, uint8_t command)
     return dm_send(dm_config[index].can_id, FDCAN_DLC_BYTES_8, data);
 }
 
+/* 发送指定电机的使能命令。 */
 HAL_StatusTypeDef dm_motor_enable(uint8_t index)
 {
     return dm_send_mode_command(index, 0xFCU);
 }
 
+/* 发送指定电机的失能命令。 */
 HAL_StatusTypeDef dm_motor_disable(uint8_t index)
 {
     return dm_send_mode_command(index, 0xFDU);
 }
 
+/* 状态查询发给 0x7FF，前两字节带目标电机 ID，失能时也能查询。 */
 HAL_StatusTypeDef dm_motor_request_feedback(uint8_t index)
 {
     uint8_t data[4] = {0U, 0U, 0xCCU, 0U};
@@ -151,6 +163,7 @@ HAL_StatusTypeDef dm_motor_request_feedback(uint8_t index)
     return status;
 }
 
+/* 将浮点物理量限幅并线性转换为协议使用的无符号定点数。 */
 static uint16_t dm_encode(float value, float min, float max, uint16_t code_max)
 {
     if (value <= min)
@@ -164,11 +177,13 @@ static uint16_t dm_encode(float value, float min, float max, uint16_t code_max)
     return (uint16_t)((value - min) * (float)code_max / (max - min));
 }
 
+/* 将协议定点数解码为以 0 为中心、范围为 ±max 的物理量。 */
 static float dm_decode(uint16_t code, float max, uint16_t code_max)
 {
     return (float)code * (2.0f * max / (float)code_max) - max;
 }
 
+/* 编码并发送指定电机的 MIT 位置、速度、增益和力矩控制帧。 */
 HAL_StatusTypeDef dm_motor_send_mit(uint8_t index, float position, float velocity,
                                    float kp, float kd, float torque)
 {
@@ -208,6 +223,7 @@ HAL_StatusTypeDef dm_motor_send_mit(uint8_t index, float position, float velocit
     return status;
 }
 
+/* 读取 CAN3 接收 FIFO 中的反馈帧，校验后更新对应电机的反馈快照。 */
 void dm_motor_can_rx_irq(FDCAN_HandleTypeDef *hfdcan, uint32_t rx_interrupts)
 {
     FDCAN_RxHeaderTypeDef header;
@@ -238,6 +254,7 @@ void dm_motor_can_rx_irq(FDCAN_HandleTypeDef *hfdcan, uint32_t rx_interrupts)
             continue;
         }
 
+        /* 用连续的反馈 ID 找到下标，再校验帧内的电机编号。 */
         index = header.Identifier - dm_config[0].master_id;
         config = &dm_config[index];
         if ((data[0] & 0xFU) != config->can_id)
@@ -254,6 +271,7 @@ void dm_motor_can_rx_irq(FDCAN_HandleTypeDef *hfdcan, uint32_t rx_interrupts)
         {
             feedback->max_move_rx_gap_ms = gap;
         }
+        /* 位置占 16 位，速度和扭矩各占 12 位。状态在 data[0] 的高四位。 */
         feedback->position_rad = dm_decode((uint16_t)((data[1] << 8) | data[2]), config->pmax, 0xFFFFU);
         feedback->velocity_rad_s = dm_decode((uint16_t)((data[3] << 4) | (data[4] >> 4)), config->vmax, 0xFFFU);
         feedback->torque_nm = dm_decode((uint16_t)(((data[4] & 0xFU) << 8) | data[5]), config->tmax, 0xFFFU);
@@ -265,6 +283,7 @@ void dm_motor_can_rx_irq(FDCAN_HandleTypeDef *hfdcan, uint32_t rx_interrupts)
     }
 }
 
+/* 处理 CAN 协议仲裁错误，累计错误诊断并记录最近的协议错误类型。 */
 void HAL_FDCAN_ErrorCallback(FDCAN_HandleTypeDef *hfdcan)
 {
     FDCAN_ProtocolStatusTypeDef status;
@@ -283,6 +302,7 @@ void HAL_FDCAN_ErrorCallback(FDCAN_HandleTypeDef *hfdcan)
     }
 }
 
+/* 处理 CAN 错误状态中断，并记录 CAN3 的 Bus-Off 状态。 */
 void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t interrupts)
 {
     if (hfdcan == &hfdcan3 && (interrupts & FDCAN_IT_BUS_OFF) != 0U)
@@ -291,25 +311,29 @@ void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t interru
     }
 }
 
-/* Status requests use 0x7FF. Space them apart to give the higher-priority
- * reply time to finish before sending the next request.
- */
+/* 轮询待查询电机；状态请求使用 0x7FF，每次调用最多发送一帧。 */
 static void dm_poll_one(uint32_t mask)
 {
     uint8_t scanned;
 
+    /* 从上次轮询位置开始扫描一圈，避免总是优先查询同一台电机。 */
     for (scanned = 0U; scanned < DM_MOTOR_COUNT; scanned++)
     {
         const uint8_t index = next_poll_index;
+        /* 先将游标移到下一台；到达末尾后回到 0。 */
         next_poll_index = (uint8_t)((index + 1U) % DM_MOTOR_COUNT);
+        /* mask 中置位的电机才需要请求反馈。 */
         if ((mask & (1U << index)) != 0U)
         {
+            /* 发送一个反馈请求后立即返回；后续请求留到下一次调用。 */
             (void)dm_motor_request_feedback(index);
             return;
         }
     }
+    /* 若 mask 中没有待查询电机，本次扫描不会发送请求。 */
 }
 
+/* 停止 Watch 点动，取消排队的运动帧并对已激活电机发起失能流程。 */
 static void dm_test_stop(dm_test_stop_t reason, uint32_t mask, uint32_t now,
                          const dm_feedback_t *snapshot)
 {
@@ -334,6 +358,7 @@ static void dm_test_stop(dm_test_stop_t reason, uint32_t mask, uint32_t now,
     }
 }
 
+/* 在空闲态检查点动条件，并锁存参与电机的起始角度和目标偏移。 */
 static void dm_test_idle(uint32_t mask, uint32_t now, const dm_feedback_t *snapshot)
 {
     uint8_t index;
@@ -402,6 +427,7 @@ static void dm_test_idle(uint32_t mask, uint32_t now, const dm_feedback_t *snaps
 
 static void dm_test_move_step(uint32_t now, const dm_feedback_t *snapshot);
 
+/* 等待所有参与电机返回新的使能反馈，超时或异常时停止测试。 */
 static void dm_test_enable_step(uint32_t now, const dm_feedback_t *snapshot)
 {
     uint8_t index;
@@ -426,6 +452,7 @@ static void dm_test_enable_step(uint32_t now, const dm_feedback_t *snapshot)
             awaiting |= bit;
         }
     }
+    /* 所有参与轴都返回新的使能反馈后，才开始发 MIT 位置指令。 */
     if (awaiting == 0U)
     {
         phase_start_ms = now;
@@ -441,6 +468,7 @@ static void dm_test_enable_step(uint32_t now, const dm_feedback_t *snapshot)
     dm_poll_one(awaiting);
 }
 
+/* 执行点动位置控制，并监测反馈超时、电机状态和行程限制。 */
 static void dm_test_move_step(uint32_t now, const dm_feedback_t *snapshot)
 {
     uint8_t index;
@@ -491,6 +519,7 @@ static void dm_test_move_step(uint32_t now, const dm_feedback_t *snapshot)
     }
 }
 
+/* 重发失能命令并等待确认反馈，随后结束点动的失能阶段。 */
 static void dm_test_disable_step(uint32_t now, const dm_feedback_t *snapshot)
 {
     uint8_t index;
@@ -524,7 +553,7 @@ static void dm_test_disable_step(uint32_t now, const dm_feedback_t *snapshot)
         dm_test.state = DM_TEST_IDLE;
     }
 }
-//
+/* 停止单台遥控电机，并根据新的失能反馈清除其活动标记。 */
 static void stop_remote_motor(uint8_t index, bool feedback_is_fresh,
                               const dm_feedback_t *feedback)
 {
@@ -535,6 +564,7 @@ static void stop_remote_motor(uint8_t index, bool feedback_is_fresh,
         return;
     }
 
+    /* 等失能发出后的新状态 0，确认后再释放该轴的控制位。 */
     if ((remote_disable_sent_mask & motor_bit) != 0U)
     {
         if (feedback_is_fresh && feedback->state == 0U &&
@@ -555,25 +585,33 @@ static void stop_remote_motor(uint8_t index, bool feedback_is_fresh,
     }
 }
 
+/* 根据遥控选择和摇杆请求更新目标角，并控制已选中的电机。 */
 static void control_remote_motors(uint8_t selected_motors, int8_t joint_motion_request,
                                   uint32_t now, const dm_feedback_t *feedback)
 {
+    /* 将摇杆请求（-100～100）换算为本控制周期内的角度增量。 */
     const float motion_fraction = (float)joint_motion_request / 100.0f;
+    /* 满杆时每 10 ms 增减约 0.001 rad，具体步长由速度和周期配置决定。 */
     const float position_step = motion_fraction * DM_TEST_RAMP_RAD_S * (DM_TEST_PERIOD_MS / 1000.0f);
+    /* 汇总本轮需要请求反馈的电机，循环结束后统一轮询。 */
     uint8_t feedback_request_mask = 0U;
     uint8_t index;
 
     for (index = 0U; index < DM_MOTOR_COUNT; index++)
     {
         const uint8_t motor_bit = 1U << index;
+        /* 通过位掩码判断该电机是否被遥控选中。 */
         const bool selected = (selected_motors & motor_bit) != 0U;
+        /* 必须已收到过反馈，且反馈未超过有效期。 */
         const bool feedback_is_fresh = feedback[index].rx_count != 0U &&
             now - feedback[index].last_rx_ms < DM_TEST_FEEDBACK_MS;
 
+        /* 未选中、反馈无效/过期或正在执行失能流程时，不发送位置控制命令。 */
         if (!selected || !feedback_is_fresh || feedback[index].state > 1U ||
             (remote_disable_sent_mask & motor_bit) != 0U)
         {
             stop_remote_motor(index, feedback_is_fresh, &feedback[index]);
+            /* 选中的电机仍请求反馈，以便后续确认状态并恢复控制。 */
             if (selected)
             {
                 feedback_request_mask |= motor_bit;
@@ -583,30 +621,36 @@ static void control_remote_motors(uint8_t selected_motors, int8_t joint_motion_r
 
         if ((dm_remote_active_mask & motor_bit) == 0U || feedback[index].state == 0U)
         {
+            /* 软件尚未激活或反馈显示电机未使能：从当前位置建立目标，避免使能后跳变。 */
             remote_target_position[index] = feedback[index].position_rad;
             if (dm_motor_enable(index) == HAL_OK)
             {
                 dm_remote_active_mask |= motor_bit;
             }
+            /* 使能后先请求一次反馈，本周期不继续发送位置命令。 */
             feedback_request_mask |= motor_bit;
             continue;
         }
 
         if (joint_motion_request != 0)
         {
+            /* 按电机安装方向修正增量，使摇杆方向与关节伸缩方向一致。 */
             const float target = remote_target_position[index] + position_step * dm_config[index].extension_direction;
             const float current_position = feedback[index].position_rad;
 
-            /* 卡住时也不累积过大的位置误差。 */
+            /* 将目标限制在反馈位置附近；电机卡住时也不会持续累积位置误差。 */
             remote_target_position[index] = fminf(current_position + DM_REMOTE_POSITION_ERROR_RAD,
                                                    fmaxf(current_position - DM_REMOTE_POSITION_ERROR_RAD, target));
         }
+        /* 摇杆回中时保持目标不变；速度和前馈力矩均设为 0。 */
         (void)dm_motor_send_mit(index, remote_target_position[index], 0.0f, DM_TEST_KP, DM_TEST_KD, 0.0f);
     }
 
+    /* 统一请求本轮需要更新的反馈。 */
     dm_poll_one(feedback_request_mask);
 }
 
+/* 周期性更新 CAN 诊断和反馈快照，并调度遥控或点动状态机。 */
 void dm_motor_control_step(bool use_remote_control, uint8_t selected_motors,
                            int8_t joint_motion_request)
 {
@@ -649,6 +693,7 @@ void dm_motor_control_step(bool use_remote_control, uint8_t selected_motors,
         return;
     }
 
+    /* V1 遥控优先。正在 Watch 点动时先走完失能流程，再交给遥控。 */
     if (use_remote_control)
     {
         dm_test.run = 0U;

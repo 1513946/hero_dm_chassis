@@ -78,8 +78,10 @@ typedef struct
     uint8_t follow_mode;      /* 一键掉头 */
     uint8_t follow_mode_last; /* 一键掉头上一次状态 */
     uint8_t key_control;      /* 键盘控制（比赛模式） */
+    /* 协议版本位在普通行驶时也会置位。是否爬阶看下面的 climb_mode。 */
     bool uses_climb_protocol;
     bool climb_mode;
+    /* 机构和侧别取上述枚举值，只有爬阶档才使用。 */
     uint8_t climb_group;
     uint8_t climb_side;
     int8_t joint_motion_request; /* -100 到 100，0 保持目标角。 */
@@ -103,6 +105,7 @@ extern void CAN_cmd_chassis_read(uint8_t id, int16_t current);
 extern const motor_measure_t *get_motor_chassis_motor_measure_point(uint8_t i);
 extern const motor_measure_t *get_motor_gimbal_yaw_measure_point(void);
 extern const super_cap_t *get_super_cap_measure_point(void);
+/* 复制给底盘任务使用的指令。收到停止帧或接收超时后，运动字段为零。 */
 void read_gimbal_chassis_command(chassis_c_get_data_t *command);
 
 #endif

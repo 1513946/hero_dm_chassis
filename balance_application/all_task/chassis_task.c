@@ -63,6 +63,7 @@ static fp32 Motor_Ecd_To_Angle(uint16_t ecd, uint16_t ecd_zero_angle_set);
 fp32 sin_yaw = 0.0f;
 fp32 cos_yaw = 0.0f;
 chassis_control_t hero_chassis;
+/* 本轮底盘任务的指令副本，麦轮和摆臂使用同一次读取的结果。 */
 static chassis_c_get_data_t gimbal_chassis_command;
 
 static uint8_t select_climb_motors(const chassis_c_get_data_t *command)
@@ -74,6 +75,7 @@ static uint8_t select_climb_motors(const chassis_c_get_data_t *command)
         return 0U;
     }
 
+    /* 先选前后组，再按侧别保留组内对应的电机位。 */
     switch (command->climb_group)
     {
     case CLIMB_FRONT_GROUP:
@@ -124,13 +126,14 @@ void Chassis_Task(void *argument)
                         hero_chassis.chassis_motor[1].give_current,
                         hero_chassis.chassis_motor[2].give_current,
                         hero_chassis.chassis_motor[3].give_current);
+        /* 麦轮指令走 CAN1。这里把摆臂选择和伸收量交给 CAN3 电机驱动。 */
         dm_motor_control_step(gimbal_chassis_command.uses_climb_protocol,
                               select_climb_motors(&gimbal_chassis_command),
                               gimbal_chassis_command.joint_motion_request);
         osDelay(1);
     }
 }
-
+//
 static void Chassis_Init(chassis_control_t *mini_chassis_init)
 {
     if (mini_chassis_init == NULL)

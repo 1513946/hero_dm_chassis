@@ -35,12 +35,14 @@ volatile uint32_t chassis_top_rx_bad_frame_count = 0;
 volatile uint32_t chassis_can_rx_error_count   = 0;
 volatile uint8_t  chassis_top_rx_last_off_flags = 0;
 
+/* 超时按底盘本地收到 0x307 的时刻计算，和云台的时钟无关。 */
 #define GIMBAL_CHASSIS_COMMAND_TIMEOUT_MS 100U
 #define CHASSIS_COMMAND_CLIMB (1U << 2)
 #define CHASSIS_COMMAND_STOP (1U << 3)
 #define CHASSIS_COMMAND_REMOTE_VALID (1U << 4)
 #define CHASSIS_COMMAND_LAYOUT_V1 (1U << 5)
 
+/* 中断发布最新一帧。底盘任务复制后再使用，Watch 可直接查看原始解包结果。 */
 volatile chassis_c_get_data_t mini_chassis;
 static volatile uint32_t gimbal_chassis_command_received_at_ms;
 
@@ -62,11 +64,13 @@ static void receive_gimbal_chassis_command(const uint8_t data[8])
     const uint8_t status_flags = data[6];
     const bool uses_climb_protocol = (status_flags & CHASSIS_COMMAND_LAYOUT_V1) != 0U;
 
+    /* 收到过 V1 后沿用该协议，避免旧格式覆盖爬阶指令。 */
     if (mini_chassis.uses_climb_protocol && !uses_climb_protocol)
     {
         return;
     }
 
+    /* V1 报文要求遥控有效且未请求停车。否则本帧运动量保持初始值 0。 */
     command.uses_climb_protocol = uses_climb_protocol;
     if (!uses_climb_protocol ||
         (status_flags & (CHASSIS_COMMAND_STOP | CHASSIS_COMMAND_REMOTE_VALID)) == CHASSIS_COMMAND_REMOTE_VALID)
@@ -81,6 +85,7 @@ static void receive_gimbal_chassis_command(const uint8_t data[8])
             command.climb_mode = (status_flags & CHASSIS_COMMAND_CLIMB) != 0U;
             command.climb_group = status_flags & 3U;
             command.climb_side = status_flags >> 6;
+            /* 以有符号字节还原摇杆方向，例如 0xCE 对应 -50。 */
             command.joint_motion_request = (int8_t)data[7];
         }
         else
@@ -312,6 +317,7 @@ void read_gimbal_chassis_command(chassis_c_get_data_t *command)
     command_age_ms = HAL_GetTick() - gimbal_chassis_command_received_at_ms;
     __set_PRIMASK(interrupt_mask);
 
+    /* 断流时清空控制副本。保留 V1 标记，让达妙遥控分支继续处理失能。 */
     if (command_age_ms >= GIMBAL_CHASSIS_COMMAND_TIMEOUT_MS)
     {
         const bool uses_climb_protocol = command->uses_climb_protocol;
