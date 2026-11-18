@@ -99,9 +99,10 @@ static void receive_gimbal_chassis_command(const uint8_t data[8])
         }
     }
 
+    from_yuntai_can++;
     mini_chassis = command;
     gimbal_chassis_command_received_at_ms = HAL_GetTick();
-    from_yuntai_can++;
+    
 }
 
 /* 9025 电机（云台）编码器解析：只取机械角 */
@@ -220,6 +221,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 
 /* ---- 发送 ---- */
 
+int can1_chassis_3508_num=0;
 /* 发送 4 个底盘电机电流（0x200，大端） */
 void CAN_cmd_chassis(int16_t motor1, int16_t motor2, int16_t motor3, int16_t motor4)
 {
@@ -231,6 +233,7 @@ void CAN_cmd_chassis(int16_t motor1, int16_t motor2, int16_t motor3, int16_t mot
     chassis_can_send_data[5] = (uint8_t)motor3;
     chassis_can_send_data[6] = (uint8_t)(motor4 >> 8);
     chassis_can_send_data[7] = (uint8_t)motor4;
+    can1_chassis_3508_num++;
 
     fdcan_send(&chassis_can, CAN1_chassis_flag_id, 8, chassis_can_send_data);
 }

@@ -13,11 +13,12 @@
 /* 点动输入的偏移上限，以及点动期间的实测位移保护。 */
 #define DM_TEST_OFFSET_RAD 1.0f
 #define DM_TEST_TRAVEL_RAD 0.18f
-#define DM_TEST_RAMP_RAD_S 0.10f
+#define DM_TEST_RAMP_RAD_S 0.40f    // 速度变化率，rad/s
 #define DM_TEST_KP 10.0f
 #define DM_TEST_KD 0.25f
 /* 遥控推杆时限制目标角与反馈角的差，避免卡住后持续累积误差。 */
-#define DM_REMOTE_POSITION_ERROR_RAD 0.10f
+#define DM_REMOTE_POSITION_ERROR_RAD 0.20f
+#define DM_PI_RAD 3.14159265358979323846f
 
 typedef struct
 {
@@ -31,14 +32,39 @@ typedef struct
 } dm_config_t;
 
 /* 核对各电机的 MIT 映射值。最后一列是伸出方向，反向安装时改为 -1。
- * 下标 0、1 对应两台 8009P，下标 2、3 对应两台 4340。
+ * 下标 0、1 对应前面的两台 4340（ID 1、2），下标 2、3 对应后面的两台 8009（ID 3、4）。
+ * pmax、vmax、tmax 必须分别与达妙助手读出的 PMAX、VMAX、TMAX 一致。
  */
 static const dm_config_t dm_config[DM_MOTOR_COUNT] =
 {
-    {0x01U, 0x11U, 12.5f, 45.0f, 54.0f, 1.0f},
-    {0x02U, 0x12U, 12.5f, 45.0f, 54.0f, 1.0f},
+    {0x01U, 0x11U, 12.5f, 20.0f, 54.0f, 1.0f},
+    {0x02U, 0x12U, 12.5f, 20.0f, 54.0f, 1.0f},
     {0x03U, 0x13U, 12.5f, 10.0f, 28.0f, 1.0f},
     {0x04U, 0x14U, 12.5f, 10.0f, 28.0f, 1.0f},
+};
+
+typedef struct
+{
+    float a_rad;
+    float b_rad;
+    float c_rad;
+    float d_rad;
+} dm_angle_limit_t;
+
+/* 每行对应一台电机，直接使用驱动器原始位置，单位为 rad，不做角度归一化。
+ * 要求 -pmax <= a < b < c < d <= pmax，范围按该电机保存零点后的实测角度设置。
+ * [a, b] 只允许角度增大，(b, c) 允许双向，[c, d] 只允许角度减小。
+ * [a, d] 之外保持目标角；这些区间按电机反馈角的正负方向定义。
+ * ID 2 的实测行程约为 -3.5～4.5 rad，b、c 暂各留出 0.5 rad，需实测确认停止余量。
+ * 其余三台仍保留原示例值，需分别测量后修改。
+ */
+static const dm_angle_limit_t dm_angle_limit[DM_MOTOR_COUNT] =
+{
+    /*       a              b                  c             d       */
+    {-DM_PI_RAD, -DM_PI_RAD / 2.0f, DM_PI_RAD / 2.0f, DM_PI_RAD}, /* 下标 0，前 4340，ID 1，示例 */
+    {-3.5f,      -3.0f,             4.0f,             4.5f},   /* 下标 1，前 4340，ID 2 */
+    {-DM_PI_RAD, -DM_PI_RAD / 2.0f, DM_PI_RAD / 2.0f, DM_PI_RAD}, /* 下标 2，后 8009，ID 3，示例 */
+    {-DM_PI_RAD, -DM_PI_RAD / 2.0f, DM_PI_RAD / 2.0f, DM_PI_RAD}, /* 下标 3，后 8009，ID 4，示例 */
 };
 
 volatile dm_test_t dm_test;
@@ -635,12 +661,23 @@ static void control_remote_motors(uint8_t selected_motors, int8_t joint_motion_r
         if (joint_motion_request != 0)
         {
             /* 按电机安装方向修正增量，使摇杆方向与关节伸缩方向一致。 */
-            const float target = remote_target_position[index] + position_step * dm_config[index].extension_direction;
+            const float motor_position_step = position_step * dm_config[index].extension_direction;
             const float current_position = feedback[index].position_rad;
+            const dm_angle_limit_t *limit = &dm_angle_limit[index];
+            /* 直接比较原始反馈角，保留超过 ±π 时的位置和运动方向。 */
+            const bool positive_allowed = current_position >= limit->a_rad && current_position < limit->c_rad;
+            const bool negative_allowed = current_position > limit->b_rad && current_position <= limit->d_rad;
 
-            /* 将目标限制在反馈位置附近；电机卡住时也不会持续累积位置误差。 */
-            remote_target_position[index] = fminf(current_position + DM_REMOTE_POSITION_ERROR_RAD,
-                                                   fmaxf(current_position - DM_REMOTE_POSITION_ERROR_RAD, target));
+            /* 只在允许的方向更新目标；受限方向沿用上一周期的目标角。 */
+            if ((motor_position_step > 0.0f && positive_allowed) ||
+                (motor_position_step < 0.0f && negative_allowed))
+            {
+                const float target = remote_target_position[index] + motor_position_step;
+
+                /* 目标角与反馈角使用同一原始坐标，并限制误差，避免卡住后持续累积。 */
+                remote_target_position[index] = fminf(current_position + DM_REMOTE_POSITION_ERROR_RAD,
+                                                       fmaxf(current_position - DM_REMOTE_POSITION_ERROR_RAD, target));
+            }
         }
         /* 摇杆回中时保持目标不变；速度和前馈力矩均设为 0。 */
         (void)dm_motor_send_mit(index, remote_target_position[index], 0.0f, DM_TEST_KP, DM_TEST_KD, 0.0f);
