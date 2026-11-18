@@ -75,6 +75,10 @@ typedef struct
 extern volatile dm_test_t dm_test;
 extern volatile dm_feedback_t dm_feedback[DM_MOTOR_COUNT];
 extern volatile dm_can_diag_t dm_can_diag;
+/* 遥控机械臂在线调参，四台共用；在 Keil Watch 的 Value 列修改。 */
+extern volatile float dm_remote_kp;
+extern volatile float dm_remote_kd;
+extern volatile float dm_remote_speed_rad_s;
 /* 遥控已提交使能的电机位，等待失能确认时仍保留。实际使能看反馈 state。 */
 extern volatile uint8_t dm_remote_active_mask;
 

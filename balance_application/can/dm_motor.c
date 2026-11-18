@@ -2,7 +2,7 @@
 
 #include <math.h>
 
-/* 点动和遥控共用发送周期、目标角变化速率以及 MIT 增益。 */
+/* 点动和遥控共用发送周期；以下固定速度和增益用于 Watch 点动测试。 */
 #define DM_TEST_ALL_MOTORS ((1U << DM_MOTOR_COUNT) - 1U)
 #define DM_TEST_PERIOD_MS 10U
 #define DM_TEST_FEEDBACK_MS 50U
@@ -18,7 +18,14 @@
 #define DM_TEST_KD 0.25f
 /* 遥控推杆时限制目标角与反馈角的差，避免卡住后持续累积误差。 */
 #define DM_REMOTE_POSITION_ERROR_RAD 0.20f
-#define DM_PI_RAD 3.14159265358979323846f
+
+/* 遥控机械臂在线调参，四台电机共用。
+ * Keil Watch 中修改这些变量即可生效；调好后把记录值写回下面的初始值。
+ * Kp、Kd 的协议范围分别为 0～500、0～5；速度使用非负值，单位 rad/s。
+ */
+volatile float dm_remote_kp = 20.0f;             /* 位置增益，影响跟随力度。 */
+volatile float dm_remote_kd = 1.0f;             /* 阻尼增益，影响运动阻尼。 */
+volatile float dm_remote_speed_rad_s = 0.50f;    /* 满杆时目标角的变化速度。 */
 
 typedef struct
 {
@@ -31,16 +38,17 @@ typedef struct
     float extension_direction;
 } dm_config_t;
 
-/* 核对各电机的 MIT 映射值。最后一列是伸出方向，反向安装时改为 -1。
- * 下标 0、1 对应前面的两台 4340（ID 1、2），下标 2、3 对应后面的两台 8009（ID 3、4）。
+/* 下标 0、1 对应前面的两台 4340（ID 1、2），下标 2、3 对应后面的两台 8009（ID 3、4）。
  * pmax、vmax、tmax 必须分别与达妙助手读出的 PMAX、VMAX、TMAX 一致。
+ * 最后一列将遥控正向请求换算成角度增量：ID 1、3 为 -1，ID 2、4 为 +1。
  */
 static const dm_config_t dm_config[DM_MOTOR_COUNT] =
 {
-    {0x01U, 0x11U, 12.5f, 20.0f, 54.0f, 1.0f},
-    {0x02U, 0x12U, 12.5f, 20.0f, 54.0f, 1.0f},
-    {0x03U, 0x13U, 12.5f, 10.0f, 28.0f, 1.0f},
-    {0x04U, 0x14U, 12.5f, 10.0f, 28.0f, 1.0f},
+    /* CAN ID  反馈 ID    PMAX       VMAX   TMAX   正向角度增量符号 */
+    {0x01U,    0x11U,    12.5f,     20.0f, 28.0f, -1.0f}, /* 前 4340，ID 1 */
+    {0x02U,    0x12U,    12.5f,     20.0f, 28.0f,  1.0f}, /* 前 4340，ID 2 */
+    {0x03U,    0x13U,    3.141549f, 45.0f, 54.0f, -1.0f}, /* 后 8009，ID 3 */
+    {0x04U,    0x14U,    3.141549f, 45.0f, 54.0f,  1.0f}, /* 后 8009，ID 4 */
 };
 
 typedef struct
@@ -54,17 +62,17 @@ typedef struct
 /* 每行对应一台电机，直接使用驱动器原始位置，单位为 rad，不做角度归一化。
  * 要求 -pmax <= a < b < c < d <= pmax，范围按该电机保存零点后的实测角度设置。
  * [a, b] 只允许角度增大，(b, c) 允许双向，[c, d] 只允许角度减小。
+ * b、c 是各电机的双向活动区边界，到达边界后只允许朝区间内返回。
+ * a、d 取该电机的 -pmax、pmax，使其余可反馈角度范围均可单向返回。
  * [a, d] 之外保持目标角；这些区间按电机反馈角的正负方向定义。
- * ID 2 的实测行程约为 -3.5～4.5 rad，b、c 暂各留出 0.5 rad，需实测确认停止余量。
- * 其余三台仍保留原示例值，需分别测量后修改。
  */
 static const dm_angle_limit_t dm_angle_limit[DM_MOTOR_COUNT] =
 {
-    /*       a              b                  c             d       */
-    {-DM_PI_RAD, -DM_PI_RAD / 2.0f, DM_PI_RAD / 2.0f, DM_PI_RAD}, /* 下标 0，前 4340，ID 1，示例 */
-    {-3.5f,      -3.0f,             4.0f,             4.5f},   /* 下标 1，前 4340，ID 2 */
-    {-DM_PI_RAD, -DM_PI_RAD / 2.0f, DM_PI_RAD / 2.0f, DM_PI_RAD}, /* 下标 2，后 8009，ID 3，示例 */
-    {-DM_PI_RAD, -DM_PI_RAD / 2.0f, DM_PI_RAD / 2.0f, DM_PI_RAD}, /* 下标 3，后 8009，ID 4，示例 */
+    /*       a        b      c       d       */
+    {-12.5f,     -4.0f,  1.0f, 12.5f},     /* 下标 0，前 4340，ID 1 */
+    {-12.5f,     -1.0f,  4.0f, 12.5f},     /* 下标 1，前 4340，ID 2 */
+    {-3.141549f, -1.1f,  0.0f,  3.141549f}, /* 下标 2，后 8009，ID 3 */
+    {-3.141549f,  0.0f,  1.1f,  3.141549f}, /* 下标 3，后 8009，ID 4 */
 };
 
 volatile dm_test_t dm_test;
@@ -617,8 +625,8 @@ static void control_remote_motors(uint8_t selected_motors, int8_t joint_motion_r
 {
     /* 将摇杆请求（-100～100）换算为本控制周期内的角度增量。 */
     const float motion_fraction = (float)joint_motion_request / 100.0f;
-    /* 满杆时每 10 ms 增减约 0.001 rad，具体步长由速度和周期配置决定。 */
-    const float position_step = motion_fraction * DM_TEST_RAMP_RAD_S * (DM_TEST_PERIOD_MS / 1000.0f);
+    /* 按配置的角度变化速率和控制周期计算目标角增量。 */
+    const float position_step = motion_fraction * dm_remote_speed_rad_s * (DM_TEST_PERIOD_MS / 1000.0f);
     /* 汇总本轮需要请求反馈的电机，循环结束后统一轮询。 */
     uint8_t feedback_request_mask = 0U;
     uint8_t index;
@@ -680,7 +688,7 @@ static void control_remote_motors(uint8_t selected_motors, int8_t joint_motion_r
             }
         }
         /* 摇杆回中时保持目标不变；速度和前馈力矩均设为 0。 */
-        (void)dm_motor_send_mit(index, remote_target_position[index], 0.0f, DM_TEST_KP, DM_TEST_KD, 0.0f);
+        (void)dm_motor_send_mit(index, remote_target_position[index], 0.0f, dm_remote_kp, dm_remote_kd, 0.0f);
     }
 
     /* 统一请求本轮需要更新的反馈。 */
