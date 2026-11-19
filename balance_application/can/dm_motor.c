@@ -2,6 +2,15 @@
 
 #include <math.h>
 
+//dm电机的id和3508麦轮的id是一一对应的
+/*
+    id=2----id=1
+      |       |
+      |       |
+    id=3----id=4
+
+*/
+
 /* 点动和遥控共用发送周期；以下固定速度和增益用于 Watch 点动测试。 */
 #define DM_TEST_ALL_MOTORS ((1U << DM_MOTOR_COUNT) - 1U)
 #define DM_TEST_PERIOD_MS 10U
@@ -19,6 +28,14 @@
 /* 遥控推杆时限制目标角与反馈角的差，避免卡住后持续累积误差。 */
 #define DM_REMOTE_POSITION_ERROR_RAD 0.20f
 
+/* 重力前馈：力臂用关节轴到触地点的水平投影，不是腿长本身，也不是抬起高度。
+ * 前腿皮带按 5% 效率损耗估算；关节角超过约 86° 视为腿已接近竖直、不再支撑。 */
+#define DM_GRAVITY_G 9.81f
+#define DM_GRAVITY_BELT_EFFICIENCY 0.95f
+#define DM_GRAVITY_JOINT_ANGLE_MAX 1.50f
+/* 电机使能后前馈力矩的爬升时间，避免使能瞬间产生力矩阶跃。 */
+#define DM_GRAVITY_RAMP_MS 300U
+
 /* 遥控机械臂在线调参，四台电机共用。
  * Keil Watch 中修改这些变量即可生效；调好后把记录值写回下面的初始值。
  * Kp、Kd 的协议范围分别为 0～500、0～5；速度使用非负值，单位 rad/s。
@@ -26,6 +43,17 @@
 volatile float dm_remote_kp = 20.0f;             /* 位置增益，影响跟随力度。 */
 volatile float dm_remote_kd = 1.0f;             /* 阻尼增益，影响运动阻尼。 */
 volatile float dm_remote_speed_rad_s = 0.50f;    /* 满杆时目标角的变化速度。 */
+
+/* 重力前馈在线调参。
+ * enable 默认 0：先不补偿，确认方向、承载重量后再在 Watch 里改成 1。
+ * load_kg 是每条腿实际承担的整机重量；总重 20 kg、四腿均匀时为 5.0。
+ * 只有前后某一组着地时，该组两条腿要承担更多重量，需要相应加大。
+ * scale 是总比例，调试时先给 0.2～0.3 看方向，正常用 1.0。
+ */
+volatile uint8_t dm_gravity_enable = 0U;
+volatile float dm_gravity_scale = 1.0f;
+volatile float dm_gravity_load_kg[DM_MOTOR_COUNT] = {5.0f, 5.0f, 5.0f, 5.0f};
+volatile float dm_gravity_torque_out[DM_MOTOR_COUNT];
 
 typedef struct
 {
@@ -36,19 +64,25 @@ typedef struct
     float vmax;
     float tmax;
     float extension_direction;
+    /* 重力前馈用的机械参数。 */
+    float reduction;        /* 电机转数 / 关节转数：前腿皮带 1.75，后腿直驱 1.0 */
+    float leg_length_m;     /* 关节轴到触地点的距离，单位 m */
+    float gravity_sign;     /* 电机正转抬升机体填 +1，反转抬升填 -1 */
 } dm_config_t;
 
 /* 下标 0、1 对应前面的两台 4340（ID 1、2），下标 2、3 对应后面的两台 8009（ID 3、4）。
  * pmax、vmax、tmax 必须分别与达妙助手读出的 PMAX、VMAX、TMAX 一致。
  * 最后一列将遥控正向请求换算成角度增量：ID 1、3 为 -1，ID 2、4 为 +1。
+ * gravity_sign 先按“摇杆正向 = 抬升”填成与 extension_direction 相同，
+ * 上电实测后若某条腿的方向反了，只改该行的 gravity_sign。
  */
 static const dm_config_t dm_config[DM_MOTOR_COUNT] =
 {
-    /* CAN ID  反馈 ID    PMAX       VMAX   TMAX   正向角度增量符号 */
-    {0x01U,    0x11U,    12.5f,     20.0f, 28.0f, -1.0f}, /* 前 4340，ID 1 */
-    {0x02U,    0x12U,    12.5f,     20.0f, 28.0f,  1.0f}, /* 前 4340，ID 2 */
-    {0x03U,    0x13U,    3.141549f, 45.0f, 54.0f, -1.0f}, /* 后 8009，ID 3 */
-    {0x04U,    0x14U,    3.141549f, 45.0f, 54.0f,  1.0f}, /* 后 8009，ID 4 */
+    /* CAN ID  反馈 ID    PMAX       VMAX   TMAX   正向角度增量符号  减速比   腿长    重力符号 */
+    {0x01U,    0x11U,    12.5f,     20.0f, 28.0f, -1.0f,            1.75f,  0.20f, -1.0f}, /* 前 4340，ID 1 */
+    {0x02U,    0x12U,    12.5f,     20.0f, 28.0f,  1.0f,            1.75f,  0.20f,  1.0f}, /* 前 4340，ID 2 */
+    {0x03U,    0x13U,    3.141549f, 45.0f, 54.0f, -1.0f,            1.00f,  0.23f, -1.0f}, /* 后 8009，ID 3 */
+    {0x04U,    0x14U,    3.141549f, 45.0f, 54.0f,  1.0f,            1.00f,  0.23f,  1.0f}, /* 后 8009，ID 4 */
 };
 
 typedef struct
@@ -90,6 +124,8 @@ static float requested_offset[DM_MOTOR_COUNT];
 static float remote_target_position[DM_MOTOR_COUNT];
 static uint8_t remote_disable_sent_mask;
 static uint32_t remote_stop_feedback_count[DM_MOTOR_COUNT];
+/* 重力前馈的渐入系数，0→1 对应使能后的爬升过程。 */
+static float gravity_ramp[DM_MOTOR_COUNT];
 
 /* 配置 CAN3 接收过滤器、通知和启动状态，用于电机通信。 */
 HAL_StatusTypeDef dm_motor_can_start(void)
@@ -587,6 +623,49 @@ static void dm_test_disable_step(uint32_t now, const dm_feedback_t *snapshot)
         dm_test.state = DM_TEST_IDLE;
     }
 }
+/* 计算一台电机的重力前馈力矩，返回值是电机侧力矩，单位 N·m。
+ * motor_angle_rad 使用该轴的目标角（电机原始坐标，rad）。
+ *
+ * 把电机角换成关节角：theta = gravity_sign * motor_angle / reduction。
+ * theta 从 0 增大表示腿往下压、把机体抬高：
+ *   竖直高度 h = L * sin(theta)
+ *   水平力臂 x = L * cos(theta)
+ *   关节保持力矩 = load_kg * g * x
+ *   电机侧力矩   = 关节力矩 / (reduction * 皮带效率)
+ * theta <= 0（腿在水平面以上）或接近竖直时不承担机体重量，返回 0。
+ */
+static float dm_gravity_torque(uint8_t index, float motor_angle_rad)
+{
+    const dm_config_t *config;
+    float joint_angle;
+    float torque;
+
+    if (dm_gravity_enable == 0U || index >= DM_MOTOR_COUNT)
+    {
+        if (index < DM_MOTOR_COUNT)
+        {
+            dm_gravity_torque_out[index] = 0.0f;
+        }
+        return 0.0f;
+    }
+
+    config = &dm_config[index];
+    joint_angle = config->gravity_sign * motor_angle_rad / config->reduction;
+    if (joint_angle <= 0.0f || joint_angle >= DM_GRAVITY_JOINT_ANGLE_MAX)
+    {
+        dm_gravity_torque_out[index] = 0.0f;
+        return 0.0f;
+    }
+
+    torque = dm_gravity_load_kg[index] * DM_GRAVITY_G *
+             config->leg_length_m * cosf(joint_angle);
+    torque /= config->reduction * DM_GRAVITY_BELT_EFFICIENCY;
+    /* 前馈力矩与“抬升”同向；反装电机的 gravity_sign 会把方向一起翻过来。 */
+    torque = config->gravity_sign * torque * dm_gravity_scale;
+    dm_gravity_torque_out[index] = torque;
+    return torque;
+}
+
 /* 停止单台遥控电机，并根据新的失能反馈清除其活动标记。 */
 static void stop_remote_motor(uint8_t index, bool feedback_is_fresh,
                               const dm_feedback_t *feedback)
@@ -657,6 +736,8 @@ static void control_remote_motors(uint8_t selected_motors, int8_t joint_motion_r
         {
             /* 软件尚未激活或反馈显示电机未使能：从当前位置建立目标，避免使能后跳变。 */
             remote_target_position[index] = feedback[index].position_rad;
+            /* 重新使能时重力前馈从 0 重新爬升。 */
+            gravity_ramp[index] = 0.0f;
             if (dm_motor_enable(index) == HAL_OK)
             {
                 dm_remote_active_mask |= motor_bit;
@@ -687,8 +768,22 @@ static void control_remote_motors(uint8_t selected_motors, int8_t joint_motion_r
                                                        fmaxf(current_position - DM_REMOTE_POSITION_ERROR_RAD, target));
             }
         }
-        /* 摇杆回中时保持目标不变；速度和前馈力矩均设为 0。 */
-        (void)dm_motor_send_mit(index, remote_target_position[index], 0.0f, dm_remote_kp, dm_remote_kd, 0.0f);
+        /* 摇杆回中时保持目标不变；速度设为 0，靠 MIT 的 kp/kd 保持位置。
+         * 重力前馈按目标角计算，并乘一个缓慢爬升的系数，避免使能瞬间力矩阶跃。
+         * 关闭前馈时把爬升系数清零，这样在 Watch 里临时打开也会从 0 渐入。 */
+        if (dm_gravity_enable == 0U)
+        {
+            gravity_ramp[index] = 0.0f;
+        }
+        else if (gravity_ramp[index] < 1.0f)
+        {
+            gravity_ramp[index] = fminf(1.0f, gravity_ramp[index] +
+                                        (float)DM_TEST_PERIOD_MS / (float)DM_GRAVITY_RAMP_MS);
+        }
+        (void)dm_motor_send_mit(index, remote_target_position[index], 0.0f,
+                                dm_remote_kp, dm_remote_kd,
+                                dm_gravity_torque(index, remote_target_position[index]) *
+                                gravity_ramp[index]);
     }
 
     /* 统一请求本轮需要更新的反馈。 */

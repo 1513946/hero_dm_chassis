@@ -79,6 +79,14 @@ extern volatile dm_can_diag_t dm_can_diag;
 extern volatile float dm_remote_kp;
 extern volatile float dm_remote_kd;
 extern volatile float dm_remote_speed_rad_s;
+/* 重力前馈在线调参：enable 先保持 0，确认每条腿的补偿方向后再打开。
+ * load_kg 是这条腿静态承担的整机重量（kg），总重 20 kg、四条腿均匀时填 5.0。
+ * 车轮也在承重时，腿实际承担的重量可能远小于 5 kg，需要按实际工况填。 */
+extern volatile uint8_t dm_gravity_enable;
+extern volatile float dm_gravity_scale;
+extern volatile float dm_gravity_load_kg[DM_MOTOR_COUNT];
+/* 最近一次算出的重力前馈力矩（电机侧，N·m，未乘渐入系数），Watch 里用来核对方向和大小。 */
+extern volatile float dm_gravity_torque_out[DM_MOTOR_COUNT];
 /* 遥控已提交使能的电机位，等待失能确认时仍保留。实际使能看反馈 state。 */
 extern volatile uint8_t dm_remote_active_mask;
 
