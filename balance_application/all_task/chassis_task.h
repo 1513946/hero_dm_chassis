@@ -263,4 +263,9 @@ typedef struct
 
 extern void Chassis_Task(void *argument);
 
+/* 爬阶使能消抖诊断（Watch 用）。 */
+extern volatile uint32_t climb_mode_off_count;
+extern volatile uint32_t climb_mode_last_off_ms;
+extern volatile uint32_t climb_mode_max_off_ms;
+
 #endif

@@ -1,9 +1,9 @@
 hero_dm_chassis\ins_task.o: ..\balance_application\all_task\ins_task.c
 hero_dm_chassis\ins_task.o: ..\balance_application\all_task\ins_task.h
-hero_dm_chassis\ins_task.o: ..\balance_bsp\math_bsp\c_data_typedef.h
+hero_dm_chassis\ins_task.o: ../balance_bsp/math_bsp/c_data_typedef.h
 hero_dm_chassis\ins_task.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdint.h
-hero_dm_chassis\ins_task.o: ..\balance_bsp\scm_bsp\imu_driver\ist8310\ist8310driver.h
-hero_dm_chassis\ins_task.o: ..\balance_bsp\scm_bsp\imu_driver\bm1088\BMI088driver.h
+hero_dm_chassis\ins_task.o: ../balance_bsp/scm_bsp/imu_driver/ist8310/ist8310driver.h
+hero_dm_chassis\ins_task.o: ../balance_bsp/scm_bsp/imu_driver/bm1088/BMI088driver.h
 hero_dm_chassis\ins_task.o: ../Core/Inc/main.h
 hero_dm_chassis\ins_task.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h
 hero_dm_chassis\ins_task.o: ../Core/Inc/stm32h7xx_hal_conf.h
@@ -50,12 +50,12 @@ hero_dm_chassis\ins_task.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_ua
 hero_dm_chassis\ins_task.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os.h
 hero_dm_chassis\ins_task.o: ../Drivers/CMSIS/RTOS2/Include/cmsis_os2.h
 hero_dm_chassis\ins_task.o: ../Core/Inc/spi.h
-hero_dm_chassis\ins_task.o: ..\balance_application\can\can_user.h
-hero_dm_chassis\ins_task.o: ..\balance_bsp\scm_bsp\can_init\can_init.h
-hero_dm_chassis\ins_task.o: ..\balance_application\RM_referee\referee.h
-hero_dm_chassis\ins_task.o: ..\balance_application\RM_referee\protocol.h
+hero_dm_chassis\ins_task.o: ../balance_application/can/can_user.h
+hero_dm_chassis\ins_task.o: ../balance_bsp/scm_bsp/can_init/can_init.h
+hero_dm_chassis\ins_task.o: ../balance_application/RM_referee/referee.h
+hero_dm_chassis\ins_task.o: ../balance_application/RM_referee/protocol.h
 hero_dm_chassis\ins_task.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
-hero_dm_chassis\ins_task.o: ..\balance_application\control_alg\pid\pid.h
+hero_dm_chassis\ins_task.o: ../balance_application/control_alg/pid/pid.h
 hero_dm_chassis\ins_task.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
 hero_dm_chassis\ins_task.o: ../Core/Inc/FreeRTOSConfig.h
 hero_dm_chassis\ins_task.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
@@ -65,4 +65,4 @@ hero_dm_chassis\ins_task.o: ../Middlewares/Third_Party/FreeRTOS/Source/portable/
 hero_dm_chassis\ins_task.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h
 hero_dm_chassis\ins_task.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h
 hero_dm_chassis\ins_task.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h
-hero_dm_chassis\ins_task.o: ..\algorithm\MahonyAHRS.h
+hero_dm_chassis\ins_task.o: ../algorithm/MahonyAHRS.h

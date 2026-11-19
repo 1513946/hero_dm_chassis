@@ -87,6 +87,9 @@ extern volatile float dm_gravity_scale;
 extern volatile float dm_gravity_load_kg[DM_MOTOR_COUNT];
 /* 最近一次算出的重力前馈力矩（电机侧，N·m，未乘渐入系数），Watch 里用来核对方向和大小。 */
 extern volatile float dm_gravity_torque_out[DM_MOTOR_COUNT];
+/* 在线调试：最近一次下发的电机侧目标角、目标-实际误差，单位 rad。 */
+extern volatile float dm_target_position_out[DM_MOTOR_COUNT];
+extern volatile float dm_position_error_out[DM_MOTOR_COUNT];
 /* 遥控已提交使能的电机位（含未选中持位的），等待失能确认时仍保留。实际使能看反馈 state。 */
 extern volatile uint8_t dm_remote_active_mask;
 

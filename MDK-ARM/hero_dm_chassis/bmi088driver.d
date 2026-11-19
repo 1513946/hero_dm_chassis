@@ -1,6 +1,6 @@
 hero_dm_chassis\bmi088driver.o: ..\balance_bsp\scm_bsp\imu_driver\bm1088\BMI088driver.c
 hero_dm_chassis\bmi088driver.o: ..\balance_bsp\scm_bsp\imu_driver\bm1088\BMI088driver.h
-hero_dm_chassis\bmi088driver.o: ..\balance_bsp\math_bsp\c_data_typedef.h
+hero_dm_chassis\bmi088driver.o: ../balance_bsp/math_bsp/c_data_typedef.h
 hero_dm_chassis\bmi088driver.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdint.h
 hero_dm_chassis\bmi088driver.o: ../Core/Inc/main.h
 hero_dm_chassis\bmi088driver.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h

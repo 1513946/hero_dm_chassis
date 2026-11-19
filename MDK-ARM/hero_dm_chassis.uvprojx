@@ -81,7 +81,7 @@
           </BeforeMake>
           <AfterMake>
             <RunUserProg1>0</RunUserProg1>
-            <RunUserProg2>0</RunUserProg2>
+            <RunUserProg2>1</RunUserProg2>
             <UserProg1Name></UserProg1Name>
             <UserProg2Name></UserProg2Name>
             <UserProg1Dos16Mode>0</UserProg1Dos16Mode>
@@ -339,7 +339,7 @@
               <MiscControls></MiscControls>
               <Define>USE_PWR_LDO_SUPPLY,USE_HAL_DRIVER,STM32H723xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include;../Middlewares/ST/ARM/DSP/Inc;..\balance_bsp\math_bsp;..\balance_bsp\scm_bsp\imu_driver\bm1088;..\balance_bsp\crg_filter;..\balance_bsp\scm_bsp\can_init;..\balance_application\can;..\balance_application\control_alg\pid;..\balance_application\all_task;..\balance_application\RM_referee;..\balance_application\remote;..\algorithm;..\balance_bsp\scm_bsp\imu_driver\ist8310</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include;../Middlewares/ST/ARM/DSP/Inc;../balance_bsp/math_bsp;../balance_bsp/scm_bsp/imu_driver/bm1088;../balance_bsp/crg_filter;../balance_bsp/scm_bsp/can_init;../balance_application/can;../balance_application/control_alg/pid;../balance_application/all_task;../balance_application/RM_referee;../balance_application/remote;../algorithm;../balance_bsp/scm_bsp/imu_driver/ist8310</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>

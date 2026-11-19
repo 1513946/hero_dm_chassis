@@ -44,5 +44,5 @@ hero_dm_chassis\can_init.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_ti
 hero_dm_chassis\can_init.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h
 hero_dm_chassis\can_init.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h
 hero_dm_chassis\can_init.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
-hero_dm_chassis\can_init.o: ..\balance_bsp\math_bsp\c_data_typedef.h
+hero_dm_chassis\can_init.o: ../balance_bsp/math_bsp/c_data_typedef.h
 hero_dm_chassis\can_init.o: ../Core/Inc/fdcan.h

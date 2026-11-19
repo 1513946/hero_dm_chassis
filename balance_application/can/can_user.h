@@ -94,6 +94,22 @@ extern volatile uint32_t chassis_top_rx_bad_frame_count;
 extern volatile uint32_t chassis_can_rx_error_count;
 extern volatile uint8_t  chassis_top_rx_last_off_flags;
 
+/* 反馈计数与角度无关：电机静止时仍应持续增长。 */
+extern volatile uint32_t chassis_motor_rx_count[4];
+extern volatile uint32_t chassis_motor_last_rx_ms[4];
+
+typedef struct
+{
+    uint32_t rx_count;               /* CAN2 收到的标准 ID 0x307 帧，解析前计数 */
+    uint32_t last_rx_ms;
+    uint32_t legacy_reject_count;    /* 已使用V1后收到旧协议，按原规则拒绝 */
+    uint32_t stop_count;
+    uint32_t remote_invalid_count;
+    uint8_t last_data[8];            /* 最近一条格式正确的0x307原始报文 */
+} can2_command_diag_t;
+
+extern volatile can2_command_diag_t can2_command_diag;
+
 /* ---- 发送 ---- */
 extern void CAN_cmd_chassis(int16_t motor1, int16_t motor2, int16_t motor3, int16_t motor4);
 extern void CAN_cmd_cap(RM_Referee_system_t *rm_data);

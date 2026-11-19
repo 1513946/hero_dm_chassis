@@ -125,16 +125,16 @@ void MX_FREERTOS_Init(void) {
 
   /* Create the thread(s) */
   /* creation of ui_task */
-  //ui_taskHandle = osThreadNew(StartDefaultTask, NULL, &ui_task_attributes);
+  ui_taskHandle = osThreadNew(StartDefaultTask, NULL, &ui_task_attributes);
 
   /* creation of crg_test_task */
-  //crg_test_taskHandle = osThreadNew(Crg_test_Task, NULL, &crg_test_task_attributes);
+  crg_test_taskHandle = osThreadNew(Crg_test_Task, NULL, &crg_test_task_attributes);
 
   /* creation of imu_task */
   imu_taskHandle = osThreadNew(Imu_Task, NULL, &imu_task_attributes);
 
   /* creation of referee_usart_t */
-  //referee_usart_tHandle = osThreadNew(Referee_Usart_Task, NULL, &referee_usart_t_attributes);
+  referee_usart_tHandle = osThreadNew(Referee_Usart_Task, NULL, &referee_usart_t_attributes);
 
   /* creation of chassis_task */
   chassis_taskHandle = osThreadNew(Chassis_Task, NULL, &chassis_task_attributes);

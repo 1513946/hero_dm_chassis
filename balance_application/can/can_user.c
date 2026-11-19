@@ -27,6 +27,9 @@
 
 motor_measure_t motor_gimbal[1];
 motor_measure_t motor_chassis[4];
+volatile uint32_t chassis_motor_rx_count[4];
+volatile uint32_t chassis_motor_last_rx_ms[4];
+volatile can2_command_diag_t can2_command_diag;
 
 /* Keil Watch 诊断计数器：区分收到的 OFF 帧与本地模式变化 */
 volatile uint32_t chassis_top_rx_on_count      = 0;
@@ -67,7 +70,20 @@ static void receive_gimbal_chassis_command(const uint8_t data[8])
     /* 收到过 V1 后沿用该协议，避免旧格式覆盖爬阶指令。 */
     if (mini_chassis.uses_climb_protocol && !uses_climb_protocol)
     {
+        can2_command_diag.legacy_reject_count++;
         return;
+    }
+
+    if (uses_climb_protocol)
+    {
+        if ((status_flags & CHASSIS_COMMAND_STOP) != 0U)
+        {
+            can2_command_diag.stop_count++;
+        }
+        if ((status_flags & CHASSIS_COMMAND_REMOTE_VALID) == 0U)
+        {
+            can2_command_diag.remote_invalid_count++;
+        }
     }
 
     /* V1 报文要求遥控有效且未请求停车。否则本帧运动量保持初始值 0。 */
@@ -115,6 +131,7 @@ void get_9025_motor_ecd(motor_measure_t *ptr, uint8_t *data)
 static void fdcan_send(FDCAN_HandleTypeDef *hfdcan, uint32_t std_id, uint8_t dlc_bytes, uint8_t *data)
 {
     FDCAN_TxHeaderTypeDef tx = {0};
+    volatile can_bus_diag_t *diag = &can_bus_diag[hfdcan == &hfdcan1 ? 0U : 1U];
 
     tx.Identifier          = std_id;
     tx.IdType              = FDCAN_STANDARD_ID;
@@ -126,9 +143,19 @@ static void fdcan_send(FDCAN_HandleTypeDef *hfdcan, uint32_t std_id, uint8_t dlc
     tx.TxEventFifoControl  = FDCAN_NO_TX_EVENTS;
     tx.MessageMarker       = 0;
 
-    if (HAL_FDCAN_GetTxFifoFreeLevel(hfdcan) > 0u)
+    if (HAL_FDCAN_GetTxFifoFreeLevel(hfdcan) == 0U)
     {
-        (void)HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &tx, data);
+        diag->tx_fifo_full++;
+        return;
+    }
+    if (HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &tx, data) == HAL_OK)
+    {
+        diag->tx_queued++;
+    }
+    else
+    {
+        diag->tx_hal_errors++;
+        diag->hal_error = hfdcan->ErrorCode;
     }
 }
 
@@ -138,10 +165,13 @@ static void fdcan_send(FDCAN_HandleTypeDef *hfdcan, uint32_t std_id, uint8_t dlc
  * 云台 CAN：0x200 9025 编码器、0x307 云台数据。
  * 第三路 CAN 交由达妙电机驱动处理。
  */
+volatile int gimbal_can2_num=0;
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
     FDCAN_RxHeaderTypeDef rx_header;
-    uint8_t rx_data[8];
+    /* HAL 按DLC复制数据，留足最大帧长度，异常报文也不能覆盖中断栈。 */
+    uint8_t rx_data[64];
+    volatile can_bus_diag_t *diag;
 
     if (hfdcan == &hfdcan3)
     {
@@ -149,9 +179,14 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
         return;
     }
 
-    if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) == 0u)
+    if (hfdcan != &hfdcan1 && hfdcan != &hfdcan2)
     {
         return;
+    }
+    diag = &can_bus_diag[hfdcan == &hfdcan1 ? 0U : 1U];
+    if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_MESSAGE_LOST) != 0U)
+    {
+        diag->rx_fifo_lost++;
     }
 
     while (HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0) > 0u)
@@ -159,26 +194,52 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
         if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data) != HAL_OK)
         {
             chassis_can_rx_error_count++;
+            diag->rx_read_errors++;
             break;
+        }
+
+        /* 在ID分支和协议检查前计数：从硬件收不到帧与解析拒绝是两种问题。 */
+        diag->rx_count++;
+        diag->last_rx_ms = HAL_GetTick();
+        diag->last_rx_id = rx_header.Identifier;
+        if (hfdcan == &hfdcan2 && rx_header.IdType == FDCAN_STANDARD_ID &&
+            rx_header.Identifier == CAN2_recive_gimbal_msg)
+        {
+            can2_command_diag.rx_count++;
+            can2_command_diag.last_rx_ms = diag->last_rx_ms;
+        }
+        if (rx_header.IdType != FDCAN_STANDARD_ID ||
+            rx_header.RxFrameType != FDCAN_DATA_FRAME ||
+            rx_header.FDFormat != FDCAN_CLASSIC_CAN)
+        {
+            diag->rx_invalid++;
+            continue;
         }
 
         if (hfdcan == &hfdcan1)  /* 底盘 CAN：不走滑环 */
         {
+            if (rx_header.Identifier >= CAN1_3508_M1_ID &&
+                rx_header.Identifier <= CAN1_3508_M4_ID)
+            {
+                const uint8_t index = (uint8_t)(rx_header.Identifier - CAN1_3508_M1_ID);
+                if (rx_header.DataLength != FDCAN_DLC_BYTES_8)
+                {
+                    diag->rx_invalid++;
+                    continue;
+                }
+                get_motor_measure(&motor_chassis[index], rx_data);
+                chassis_motor_rx_count[index]++;
+                chassis_motor_last_rx_ms[index] = diag->last_rx_ms;
+                continue;
+            }
             switch (rx_header.Identifier)
             {
-            case CAN1_3508_M1_ID:
-                get_motor_measure(&motor_chassis[0], rx_data);
-                break;
-            case CAN1_3508_M2_ID:
-                get_motor_measure(&motor_chassis[1], rx_data);
-                break;
-            case CAN1_3508_M3_ID:
-                get_motor_measure(&motor_chassis[2], rx_data);
-                break;
-            case CAN1_3508_M4_ID:
-                get_motor_measure(&motor_chassis[3], rx_data);
-                break;
             case CAN1_recive_cap_msg:
+                if (rx_header.DataLength < FDCAN_DLC_BYTES_4)
+                {
+                    diag->rx_invalid++;
+                    break;
+                }
                 get_cap_measure(&super_cap, rx_data);
                 break;
             default:
@@ -190,6 +251,11 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
             switch (rx_header.Identifier)
             {
             case 0x200:
+                if (rx_header.DataLength < FDCAN_DLC_BYTES_4)
+                {
+                    diag->rx_invalid++;
+                    break;
+                }
                 get_9025_motor_ecd(&motor_gimbal[0], rx_data);
                 break;
             case CAN2_recive_gimbal_msg:
@@ -199,7 +265,15 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
                     rx_header.DataLength  != FDCAN_DLC_BYTES_8)
                 {
                     chassis_top_rx_bad_frame_count++;
+                    diag->rx_invalid++;
                     break;
+                }
+                {
+                    uint8_t index;
+                    for (index = 0U; index < 8U; index++)
+                    {
+                        can2_command_diag.last_data[index] = rx_data[index];
+                    }
                 }
                 if ((rx_data[5] & 0x10U) != 0U)
                 {
@@ -211,6 +285,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
                     chassis_top_rx_last_off_flags = rx_data[5];
                 }
                 receive_gimbal_chassis_command(rx_data);
+                gimbal_can2_num++;
                 break;
             default:
                 break;

@@ -1,6 +1,6 @@
 hero_dm_chassis\pid.o: ..\balance_application\control_alg\pid\pid.c
 hero_dm_chassis\pid.o: ..\balance_application\control_alg\pid\pid.h
-hero_dm_chassis\pid.o: ..\balance_bsp\math_bsp\c_data_typedef.h
+hero_dm_chassis\pid.o: ../balance_bsp/math_bsp/c_data_typedef.h
 hero_dm_chassis\pid.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdint.h
 hero_dm_chassis\pid.o: ../Core/Inc/main.h
 hero_dm_chassis\pid.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h

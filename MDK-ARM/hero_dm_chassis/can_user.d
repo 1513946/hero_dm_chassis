@@ -1,8 +1,8 @@
 hero_dm_chassis\can_user.o: ..\balance_application\can\can_user.c
 hero_dm_chassis\can_user.o: ..\balance_application\can\can_user.h
-hero_dm_chassis\can_user.o: ..\balance_bsp\math_bsp\c_data_typedef.h
+hero_dm_chassis\can_user.o: ../balance_bsp/math_bsp/c_data_typedef.h
 hero_dm_chassis\can_user.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdint.h
-hero_dm_chassis\can_user.o: ..\balance_bsp\scm_bsp\can_init\can_init.h
+hero_dm_chassis\can_user.o: ../balance_bsp/scm_bsp/can_init/can_init.h
 hero_dm_chassis\can_user.o: ../Core/Inc/main.h
 hero_dm_chassis\can_user.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h
 hero_dm_chassis\can_user.o: ../Core/Inc/stm32h7xx_hal_conf.h
@@ -46,8 +46,8 @@ hero_dm_chassis\can_user.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_ti
 hero_dm_chassis\can_user.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h
 hero_dm_chassis\can_user.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h
 hero_dm_chassis\can_user.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
-hero_dm_chassis\can_user.o: ..\balance_application\RM_referee\referee.h
-hero_dm_chassis\can_user.o: ..\balance_application\RM_referee\protocol.h
+hero_dm_chassis\can_user.o: ../balance_application/RM_referee/referee.h
+hero_dm_chassis\can_user.o: ../balance_application/RM_referee/protocol.h
 hero_dm_chassis\can_user.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
 hero_dm_chassis\can_user.o: ..\balance_application\can\dm_motor.h
 hero_dm_chassis\can_user.o: ../Core/Inc/fdcan.h

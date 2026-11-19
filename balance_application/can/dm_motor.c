@@ -14,7 +14,7 @@
 /* 点动和遥控共用发送周期；以下固定速度和增益用于 Watch 点动测试。 */
 #define DM_TEST_ALL_MOTORS ((1U << DM_MOTOR_COUNT) - 1U)
 #define DM_TEST_PERIOD_MS 10U
-#define DM_TEST_FEEDBACK_MS 50U
+#define DM_TEST_FEEDBACK_MS 200U
 #define DM_TEST_POLL_FRESH_MS 120U
 #define DM_TEST_ENABLE_MS 150U
 #define DM_TEST_DISABLE_MS 150U
@@ -54,6 +54,9 @@ volatile uint8_t dm_gravity_enable = 1U;
 volatile float dm_gravity_scale = 1.0f;
 volatile float dm_gravity_load_kg[DM_MOTOR_COUNT] = {5.0f, 5.0f, 5.0f, 5.0f};
 volatile float dm_gravity_torque_out[DM_MOTOR_COUNT];
+/* 在线调试用：最近一次下发的目标角和“目标-实际”误差，均为电机侧 rad。 */
+volatile float dm_target_position_out[DM_MOTOR_COUNT];
+volatile float dm_position_error_out[DM_MOTOR_COUNT];
 
 typedef struct
 {
@@ -817,6 +820,8 @@ static void control_remote_motors(uint8_t enabled_motors, uint8_t selected_motor
         }
         /* 所有使能的电机（含未选中持位的）都持续下发 MIT 帧，
          * 让驱动器内部位置环持续锁位，并避免通信超时自行失能。 */
+        dm_target_position_out[index] = remote_target_position[index];
+        dm_position_error_out[index] = remote_target_position[index] - feedback[index].position_rad;
         (void)dm_motor_send_mit(index, remote_target_position[index], 0.0f,
                                 dm_remote_kp, dm_remote_kd,
                                 dm_gravity_torque(index, remote_target_position[index]) *

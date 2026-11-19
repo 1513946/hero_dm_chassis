@@ -1,6 +1,6 @@
 hero_dm_chassis\crg_filter.o: ..\balance_bsp\crg_filter\crg_filter.c
 hero_dm_chassis\crg_filter.o: ..\balance_bsp\crg_filter\crg_filter.h
-hero_dm_chassis\crg_filter.o: ..\balance_bsp\math_bsp\c_data_typedef.h
+hero_dm_chassis\crg_filter.o: ../balance_bsp/math_bsp/c_data_typedef.h
 hero_dm_chassis\crg_filter.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdint.h
 hero_dm_chassis\crg_filter.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
 hero_dm_chassis\crg_filter.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stddef.h
