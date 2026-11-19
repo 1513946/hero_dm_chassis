@@ -45,12 +45,12 @@ volatile float dm_remote_kd = 1.0f;             /* 阻尼增益，影响运动�
 volatile float dm_remote_speed_rad_s = 0.50f;    /* 满杆时目标角的变化速度。 */
 
 /* 重力前馈在线调参。
- * enable 默认 0：先不补偿，确认方向、承载重量后再在 Watch 里改成 1。
+ * enable 默认 1：调试期间保持开启，持位的未选中电机才不会因缺少前馈而下沉。
  * load_kg 是每条腿实际承担的整机重量；总重 20 kg、四腿均匀时为 5.0。
  * 只有前后某一组着地时，该组两条腿要承担更多重量，需要相应加大。
  * scale 是总比例，调试时先给 0.2～0.3 看方向，正常用 1.0。
  */
-volatile uint8_t dm_gravity_enable = 0U;
+volatile uint8_t dm_gravity_enable = 1U;
 volatile float dm_gravity_scale = 1.0f;
 volatile float dm_gravity_load_kg[DM_MOTOR_COUNT] = {5.0f, 5.0f, 5.0f, 5.0f};
 volatile float dm_gravity_torque_out[DM_MOTOR_COUNT];
@@ -123,6 +123,8 @@ static float requested_offset[DM_MOTOR_COUNT];
 /* 每轴单独保存遥控目标角及失能前的接收计数，用新反馈确认失能。 */
 static float remote_target_position[DM_MOTOR_COUNT];
 static uint8_t remote_disable_sent_mask;
+/* 上一周期真正推进过目标角的电机位，用于区分重新推进的首拍。 */
+static uint8_t remote_driven_last;
 static uint32_t remote_stop_feedback_count[DM_MOTOR_COUNT];
 /* 重力前馈的渐入系数，0→1 对应使能后的爬升过程。 */
 static float gravity_ramp[DM_MOTOR_COUNT];
@@ -698,9 +700,13 @@ static void stop_remote_motor(uint8_t index, bool feedback_is_fresh,
     }
 }
 
-/* 根据遥控选择和摇杆请求更新目标角，并控制已选中的电机。 */
-static void control_remote_motors(uint8_t selected_motors, int8_t joint_motion_request,
-                                  uint32_t now, const dm_feedback_t *feedback)
+/* 根据遥控使能集合和选择，更新目标角并控制电机。
+ * enabled_motors：本轮保持使能的电机位（左拨杆下的爬阶档为四台）。
+ * selected_motors：本轮允许遥控器在目标角上加减的电机位，是 enabled_motors 的子集。
+ * 未选中但仍在使能集合内的电机：目标角冻结，持续下发 MIT 帧持位。 */
+static void control_remote_motors(uint8_t enabled_motors, uint8_t selected_motors,
+                                  int8_t joint_motion_request, uint32_t now,
+                                  const dm_feedback_t *feedback)
 {
     /* 将摇杆请求（-100～100）换算为本控制周期内的角度增量。 */
     const float motion_fraction = (float)joint_motion_request / 100.0f;
@@ -709,32 +715,49 @@ static void control_remote_motors(uint8_t selected_motors, int8_t joint_motion_r
     /* 汇总本轮需要请求反馈的电机，循环结束后统一轮询。 */
     uint8_t feedback_request_mask = 0U;
     uint8_t index;
+    uint8_t driven_mask = 0U;
 
     for (index = 0U; index < DM_MOTOR_COUNT; index++)
     {
         const uint8_t motor_bit = 1U << index;
-        /* 通过位掩码判断该电机是否被遥控选中。 */
+        /* 是否在本轮使能集合内。 */
+        const bool enabled = (enabled_motors & motor_bit) != 0U;
+        /* 是否被遥控选中（允许动目标角）。 */
         const bool selected = (selected_motors & motor_bit) != 0U;
+        /* 上一周期是否真正推进过目标角（重新推进的首拍不做相对反馈限幅）。 */
+        const bool was_driven = (remote_driven_last & motor_bit) != 0U;
         /* 必须已收到过反馈，且反馈未超过有效期。 */
         const bool feedback_is_fresh = feedback[index].rx_count != 0U &&
             now - feedback[index].last_rx_ms < DM_TEST_FEEDBACK_MS;
 
-        /* 未选中、反馈无效/过期或正在执行失能流程时，不发送位置控制命令。 */
-        if (!selected || !feedback_is_fresh || feedback[index].state > 1U ||
-            (remote_disable_sent_mask & motor_bit) != 0U)
+        /* 不在使能集合内：走失能流程（退出爬阶或该轴被剔除）。 */
+        if (!enabled)
         {
             stop_remote_motor(index, feedback_is_fresh, &feedback[index]);
-            /* 选中的电机仍请求反馈，以便后续确认状态并恢复控制。 */
-            if (selected)
+            /* 仍在等待失能确认的电机需要轮询反馈，确认真实 state==0，避免掩码卡死。 */
+            if ((dm_remote_active_mask & motor_bit) != 0U)
             {
                 feedback_request_mask |= motor_bit;
             }
             continue;
         }
 
+        /* 使能集合内：取消仍在等待确认的失能。若电机实际已被失能，下面使能边沿
+         * 会按反馈 state==0 重新使能并重新对齐目标；若仍处于使能态，则直接沿用
+         * 冻结目标继续下发 MIT，避免快速切换拨杆时卡死在待失能状态。 */
+        remote_disable_sent_mask &= ~motor_bit;
+
+        /* 使能集合内，但反馈失效或状态异常：不发位置帧，只请求反馈。 */
+        if (!feedback_is_fresh || feedback[index].state > 1U)
+        {
+            feedback_request_mask |= motor_bit;
+            continue;
+        }
+
         if ((dm_remote_active_mask & motor_bit) == 0U || feedback[index].state == 0U)
         {
-            /* 软件尚未激活或反馈显示电机未使能：从当前位置建立目标，避免使能后跳变。 */
+            /* 软件尚未激活或反馈显示电机未使能：用实际位置建立目标，避免使能后跳变。
+             * 首次上电还没有遥控时，目标与实际位置自然重合。 */
             remote_target_position[index] = feedback[index].position_rad;
             /* 重新使能时重力前馈从 0 重新爬升。 */
             gravity_ramp[index] = 0.0f;
@@ -747,7 +770,9 @@ static void control_remote_motors(uint8_t selected_motors, int8_t joint_motion_r
             continue;
         }
 
-        if (joint_motion_request != 0)
+        /* 只有被选中的电机才允许遥控器在目标角上直接加减；
+         * 未选中的电机保持 remote_target_position 不变，即持位。 */
+        if (selected && joint_motion_request != 0)
         {
             /* 按电机安装方向修正增量，使摇杆方向与关节伸缩方向一致。 */
             const float motor_position_step = position_step * dm_config[index].extension_direction;
@@ -763,12 +788,22 @@ static void control_remote_motors(uint8_t selected_motors, int8_t joint_motion_r
             {
                 const float target = remote_target_position[index] + motor_position_step;
 
-                /* 目标角与反馈角使用同一原始坐标，并限制误差，避免卡住后持续累积。 */
-                remote_target_position[index] = fminf(current_position + DM_REMOTE_POSITION_ERROR_RAD,
-                                                       fmaxf(current_position - DM_REMOTE_POSITION_ERROR_RAD, target));
+                if (was_driven)
+                {
+                    /* 连续推进：相对反馈角限幅，避免卡死时误差无限累积。 */
+                    remote_target_position[index] = fminf(current_position + DM_REMOTE_POSITION_ERROR_RAD,
+                                                           fmaxf(current_position - DM_REMOTE_POSITION_ERROR_RAD, target));
+                }
+                else
+                {
+                    /* 重新推进的首拍：从冻结目标直接加减，不做相对反馈的限幅，
+                     * 避免持位期间的少量下垂把目标拉回反馈角。 */
+                    remote_target_position[index] = target;
+                }
+                driven_mask |= motor_bit;
             }
         }
-        /* 摇杆回中时保持目标不变；速度设为 0，靠 MIT 的 kp/kd 保持位置。
+        /* 摇杆回中或未选中时保持目标不变；速度设为 0，靠 MIT 的 kp/kd 持位。
          * 重力前馈按目标角计算，并乘一个缓慢爬升的系数，避免使能瞬间力矩阶跃。
          * 关闭前馈时把爬升系数清零，这样在 Watch 里临时打开也会从 0 渐入。 */
         if (dm_gravity_enable == 0U)
@@ -780,19 +815,24 @@ static void control_remote_motors(uint8_t selected_motors, int8_t joint_motion_r
             gravity_ramp[index] = fminf(1.0f, gravity_ramp[index] +
                                         (float)DM_TEST_PERIOD_MS / (float)DM_GRAVITY_RAMP_MS);
         }
+        /* 所有使能的电机（含未选中持位的）都持续下发 MIT 帧，
+         * 让驱动器内部位置环持续锁位，并避免通信超时自行失能。 */
         (void)dm_motor_send_mit(index, remote_target_position[index], 0.0f,
                                 dm_remote_kp, dm_remote_kd,
                                 dm_gravity_torque(index, remote_target_position[index]) *
                                 gravity_ramp[index]);
     }
 
+    /* 记录本轮真正推进过目标的电机，供下一周期判断重新推进的首拍。 */
+    remote_driven_last = driven_mask;
+
     /* 统一请求本轮需要更新的反馈。 */
     dm_poll_one(feedback_request_mask);
 }
 
 /* 周期性更新 CAN 诊断和反馈快照，并调度遥控或点动状态机。 */
-void dm_motor_control_step(bool use_remote_control, uint8_t selected_motors,
-                           int8_t joint_motion_request)
+void dm_motor_control_step(bool use_remote_control, uint8_t enabled_motors,
+                           uint8_t selected_motors, int8_t joint_motion_request)
 {
     dm_feedback_t snapshot[DM_MOTOR_COUNT];
     FDCAN_ErrorCountersTypeDef errors;
@@ -840,7 +880,7 @@ void dm_motor_control_step(bool use_remote_control, uint8_t selected_motors,
         dm_test.motor_mask = 0U;
         if (dm_test.state == DM_TEST_IDLE && dm_test.disable_pending_mask == 0U)
         {
-            control_remote_motors(selected_motors, joint_motion_request, now, snapshot);
+            control_remote_motors(enabled_motors, selected_motors, joint_motion_request, now, snapshot);
             return;
         }
     }

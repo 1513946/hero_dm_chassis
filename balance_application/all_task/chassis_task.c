@@ -19,6 +19,9 @@
 #define REAR_LEFT_MOTOR   (1U << 2)
 #define REAR_RIGHT_MOTOR  (1U << 3)
 
+/* 左拨杆下的爬阶档：四台 DM 电机全部保持使能。 */
+#define ALL_CLIMB_MOTORS (FRONT_LEFT_MOTOR | FRONT_RIGHT_MOTOR | REAR_LEFT_MOTOR | REAR_RIGHT_MOTOR)
+
 #define Remote_Deadband_Limit(mag_input, msg_output, dead_control)   \
 {                                                                    \
     if (mag_input > dead_control || mag_input < -dead_control)       \
@@ -126,8 +129,11 @@ void Chassis_Task(void *argument)
                         hero_chassis.chassis_motor[1].give_current,
                         hero_chassis.chassis_motor[2].give_current,
                         hero_chassis.chassis_motor[3].give_current);
-        /* 麦轮指令走 CAN1。这里把摆臂选择和伸收量交给 CAN3 电机驱动。 */
+        /* 麦轮指令走 CAN1。这里把摆臂选择和伸收量交给 CAN3 电机驱动。
+         * 左拨杆下（climb_mode）时四台 DM 电机全部使能，遥控只对选中的电机动目标角，
+         * 其余电机冻结目标持位。 */
         dm_motor_control_step(gimbal_chassis_command.uses_climb_protocol,
+                              gimbal_chassis_command.climb_mode ? ALL_CLIMB_MOTORS : 0U,
                               select_climb_motors(&gimbal_chassis_command),
                               gimbal_chassis_command.joint_motion_request);
         osDelay(1);
