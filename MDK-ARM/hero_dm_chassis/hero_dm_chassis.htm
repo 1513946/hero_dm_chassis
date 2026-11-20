@@ -3,7 +3,7 @@
 <title>Static Call Graph - [hero_dm_chassis\hero_dm_chassis.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image hero_dm_chassis\hero_dm_chassis.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Fri Nov 20 00:44:05 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Fri Nov 20 16:13:51 2026
 <BR><P>
 <H3>Maximum Stack Usage =        404 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -2143,8 +2143,8 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[b2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
 </UL>
 
-<P><STRONG><a name="[18c]"></a>MX_FDCAN3_Init</STRONG> (Thumb, 98 bytes, Stack size 16 bytes, fdcan.o(i.MX_FDCAN3_Init))
-<BR><BR>[Stack]<UL><LI>Max Depth = 208<LI>Call Chain = MX_FDCAN3_Init &rArr; HAL_FDCAN_Init &rArr; HAL_FDCAN_MspInit &rArr; HAL_GPIO_Init
+<P><STRONG><a name="[18c]"></a>MX_FDCAN3_Init</STRONG> (Thumb, 116 bytes, Stack size 24 bytes, fdcan.o(i.MX_FDCAN3_Init))
+<BR><BR>[Stack]<UL><LI>Max Depth = 216<LI>Call Chain = MX_FDCAN3_Init &rArr; HAL_FDCAN_Init &rArr; HAL_FDCAN_MspInit &rArr; HAL_GPIO_Init
 </UL>
 <BR>[Calls]<UL><LI><a href="#[128]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_FDCAN_Init
 <LI><a href="#[10c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Error_Handler
@@ -2699,7 +2699,7 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[a3]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_Task
 </UL>
 
-<P><STRONG><a name="[12d]"></a>dm_motor_can_rx_irq</STRONG> (Thumb, 288 bytes, Stack size 136 bytes, dm_motor.o(i.dm_motor_can_rx_irq))
+<P><STRONG><a name="[12d]"></a>dm_motor_can_rx_irq</STRONG> (Thumb, 282 bytes, Stack size 136 bytes, dm_motor.o(i.dm_motor_can_rx_irq))
 <BR><BR>[Stack]<UL><LI>Max Depth = 156<LI>Call Chain = dm_motor_can_rx_irq &rArr; HAL_FDCAN_GetRxMessage
 </UL>
 <BR>[Calls]<UL><LI><a href="#[fa]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
@@ -3862,7 +3862,7 @@ Local Symbols
 <LI><a href="#[1c6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;control_remote_motors
 </UL>
 
-<P><STRONG><a name="[1d5]"></a>dm_send</STRONG> (Thumb, 92 bytes, Stack size 56 bytes, dm_motor.o(i.dm_send))
+<P><STRONG><a name="[1d5]"></a>dm_send</STRONG> (Thumb, 98 bytes, Stack size 56 bytes, dm_motor.o(i.dm_send))
 <BR><BR>[Stack]<UL><LI>Max Depth = 92<LI>Call Chain = dm_send &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
 </UL>
 <BR>[Calls]<UL><LI><a href="#[1d8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_FDCAN_GetTxFifoFreeLevel

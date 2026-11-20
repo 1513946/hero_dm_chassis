@@ -136,19 +136,19 @@ void MX_FDCAN3_Init(void)
 
   /* USER CODE END FDCAN3_Init 1 */
   hfdcan3.Instance = FDCAN3;
-  hfdcan3.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
+  hfdcan3.Init.FrameFormat = FDCAN_FRAME_FD_BRS;
   hfdcan3.Init.Mode = FDCAN_MODE_NORMAL;
   hfdcan3.Init.AutoRetransmission = DISABLE;
   hfdcan3.Init.TransmitPause = DISABLE;
   hfdcan3.Init.ProtocolException = DISABLE;
-  hfdcan3.Init.NominalPrescaler = 1;
+  hfdcan3.Init.NominalPrescaler = 5;
   hfdcan3.Init.NominalSyncJumpWidth = 4;
   hfdcan3.Init.NominalTimeSeg1 = 14;
-  hfdcan3.Init.NominalTimeSeg2 = 4;
-  hfdcan3.Init.DataPrescaler = 1;
-  hfdcan3.Init.DataSyncJumpWidth = 1;
-  hfdcan3.Init.DataTimeSeg1 = 19;
-  hfdcan3.Init.DataTimeSeg2 = 4;
+  hfdcan3.Init.NominalTimeSeg2 = 5;
+  hfdcan3.Init.DataPrescaler = 2;
+  hfdcan3.Init.DataSyncJumpWidth = 4;
+  hfdcan3.Init.DataTimeSeg1 = 18;
+  hfdcan3.Init.DataTimeSeg2 = 6;
   hfdcan3.Init.MessageRAMOffset = 1708;
   hfdcan3.Init.StdFiltersNbr = 1;
   hfdcan3.Init.ExtFiltersNbr = 0;

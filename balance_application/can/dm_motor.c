@@ -52,7 +52,7 @@ volatile float dm_remote_speed_rad_s = 0.50f;    /* 满杆时目标角的变化�
  */
 volatile uint8_t dm_gravity_enable = 1U;
 volatile float dm_gravity_scale = 1.0f;
-volatile float dm_gravity_load_kg[DM_MOTOR_COUNT] = {5.0f, 5.0f, 5.0f, 5.0f};
+volatile float dm_gravity_load_kg[DM_MOTOR_COUNT] = {6.0f, 6.0f, 2.5f, 2.5f};
 volatile float dm_gravity_torque_out[DM_MOTOR_COUNT];
 /* 在线调试用：最近一次下发的目标角和“目标-实际”误差，均为电机侧 rad。 */
 volatile float dm_target_position_out[DM_MOTOR_COUNT];
@@ -160,7 +160,7 @@ HAL_StatusTypeDef dm_motor_can_start(void)
     return HAL_OK;
 }
 
-/* 统一从 CAN3 发经典 CAN 帧。HAL_OK 表示报文已进入发送队列。 */
+/* CAN3 使用 CAN FD + BRS，仲裁段 1 Mbps，数据段 2 Mbps。HAL_OK 表示已入队。 */
 static HAL_StatusTypeDef dm_send(uint16_t id, uint32_t dlc, const uint8_t *data)
 {
     FDCAN_TxHeaderTypeDef header = {0};
@@ -181,8 +181,8 @@ static HAL_StatusTypeDef dm_send(uint16_t id, uint32_t dlc, const uint8_t *data)
     header.TxFrameType = FDCAN_DATA_FRAME;
     header.DataLength = dlc;
     header.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
-    header.BitRateSwitch = FDCAN_BRS_OFF;
-    header.FDFormat = FDCAN_CLASSIC_CAN;
+    header.BitRateSwitch = FDCAN_BRS_ON;
+    header.FDFormat = FDCAN_FD_CAN;
     header.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
 
     if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &header, data) != HAL_OK)
@@ -320,8 +320,9 @@ void dm_motor_can_rx_irq(FDCAN_HandleTypeDef *hfdcan, uint32_t rx_interrupts)
             dm_can_diag.rx_read_errors++;
             break;
         }
+        /* 经典 CAN 和 CAN FD 的 8 字节状态反馈共用同一套数据解析。 */
         if (header.IdType != FDCAN_STANDARD_ID || header.RxFrameType != FDCAN_DATA_FRAME ||
-            header.FDFormat != FDCAN_CLASSIC_CAN || header.DataLength != FDCAN_DLC_BYTES_8 ||
+            header.DataLength != FDCAN_DLC_BYTES_8 ||
             header.Identifier < dm_config[0].master_id ||
             header.Identifier > dm_config[DM_MOTOR_COUNT - 1U].master_id)
         {
