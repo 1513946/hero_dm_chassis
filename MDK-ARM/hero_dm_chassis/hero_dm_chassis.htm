@@ -3,9 +3,9 @@
 <title>Static Call Graph - [hero_dm_chassis\hero_dm_chassis.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image hero_dm_chassis\hero_dm_chassis.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Fri Nov 20 16:13:51 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Fri Nov 20 16:40:15 2026
 <BR><P>
-<H3>Maximum Stack Usage =        404 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
+<H3>Maximum Stack Usage =        420 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
 Chassis_Task &rArr; dm_motor_control_step &rArr; dm_test_enable_step &rArr; dm_test_move_step &rArr; dm_motor_send_mit &rArr; dm_send &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
 <P>
@@ -1039,7 +1039,7 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[a3]"></a>Chassis_Task</STRONG> (Thumb, 232 bytes, Stack size 0 bytes, chassis_task.o(i.Chassis_Task))
-<BR><BR>[Stack]<UL><LI>Max Depth = 404<LI>Call Chain = Chassis_Task &rArr; dm_motor_control_step &rArr; dm_test_enable_step &rArr; dm_test_move_step &rArr; dm_motor_send_mit &rArr; dm_send &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
+<BR><BR>[Stack]<UL><LI>Max Depth = 420<LI>Call Chain = Chassis_Task &rArr; dm_motor_control_step &rArr; dm_test_enable_step &rArr; dm_test_move_step &rArr; dm_motor_send_mit &rArr; dm_send &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
 </UL>
 <BR>[Calls]<UL><LI><a href="#[f4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osDelay
 <LI><a href="#[fa]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
@@ -1551,6 +1551,7 @@ Global Symbols
 <LI><a href="#[152]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;SPI_WaitOnFlagUntilTimeout
 <LI><a href="#[d0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_Delay
 <LI><a href="#[fc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_control_step
+<LI><a href="#[1c6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;control_remote_motors
 <LI><a href="#[12d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_can_rx_irq
 <LI><a href="#[f8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;read_gimbal_chassis_command
 <LI><a href="#[11c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_FDCAN_RxFifo0Callback
@@ -2705,7 +2706,7 @@ Global Symbols
 <BR>[Calls]<UL><LI><a href="#[fa]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
 <LI><a href="#[12e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_FDCAN_GetRxMessage
 <LI><a href="#[130]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_FDCAN_GetRxFifoFillLevel
-<LI><a href="#[1cc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_decode
+<LI><a href="#[1cb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_decode
 </UL>
 <BR>[Called By]<UL><LI><a href="#[11c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_FDCAN_RxFifo0Callback
 </UL>
@@ -2722,8 +2723,8 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[a3]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_Task
 </UL>
 
-<P><STRONG><a name="[fc]"></a>dm_motor_control_step</STRONG> (Thumb, 338 bytes, Stack size 168 bytes, dm_motor.o(i.dm_motor_control_step))
-<BR><BR>[Stack]<UL><LI>Max Depth = 404<LI>Call Chain = dm_motor_control_step &rArr; dm_test_enable_step &rArr; dm_test_move_step &rArr; dm_motor_send_mit &rArr; dm_send &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
+<P><STRONG><a name="[fc]"></a>dm_motor_control_step</STRONG> (Thumb, 386 bytes, Stack size 184 bytes, dm_motor.o(i.dm_motor_control_step))
+<BR><BR>[Stack]<UL><LI>Max Depth = 420<LI>Call Chain = dm_motor_control_step &rArr; dm_test_enable_step &rArr; dm_test_move_step &rArr; dm_motor_send_mit &rArr; dm_send &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
 </UL>
 <BR>[Calls]<UL><LI><a href="#[fa]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
 <LI><a href="#[1bd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_FDCAN_GetErrorCounters
@@ -2732,6 +2733,7 @@ Global Symbols
 <LI><a href="#[1cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_test_idle
 <LI><a href="#[1d0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_test_enable_step
 <LI><a href="#[1ce]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_test_disable_step
+<LI><a href="#[1cc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_poll_one
 <LI><a href="#[1c6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;control_remote_motors
 </UL>
 <BR>[Called By]<UL><LI><a href="#[a3]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_Task
@@ -2761,7 +2763,7 @@ Global Symbols
 </UL>
 <BR>[Calls]<UL><LI><a href="#[1d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_send
 </UL>
-<BR>[Called By]<UL><LI><a href="#[1cb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_poll_one
+<BR>[Called By]<UL><LI><a href="#[1cc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_poll_one
 </UL>
 
 <P><STRONG><a name="[1ca]"></a>dm_motor_send_mit</STRONG> (Thumb, 304 bytes, Stack size 64 bytes, dm_motor.o(i.dm_motor_send_mit))
@@ -3821,13 +3823,13 @@ Local Symbols
 <LI><a href="#[1cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_test_idle
 </UL>
 
-<P><STRONG><a name="[1c6]"></a>control_remote_motors</STRONG> (Thumb, 598 bytes, Stack size 72 bytes, dm_motor.o(i.control_remote_motors))
+<P><STRONG><a name="[1c6]"></a>control_remote_motors</STRONG> (Thumb, 604 bytes, Stack size 72 bytes, dm_motor.o(i.control_remote_motors))
 <BR><BR>[Stack]<UL><LI>Max Depth = 228<LI>Call Chain = control_remote_motors &rArr; dm_motor_send_mit &rArr; dm_send &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
 </UL>
-<BR>[Calls]<UL><LI><a href="#[1ca]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_send_mit
+<BR>[Calls]<UL><LI><a href="#[fa]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
+<LI><a href="#[1ca]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_send_mit
 <LI><a href="#[1c8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_enable
 <LI><a href="#[1c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;stop_remote_motor
-<LI><a href="#[1cb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_poll_one
 <LI><a href="#[1c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_gravity_torque
 <LI><a href="#[1ba]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__hardfp_fminf
 <LI><a href="#[1b7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__hardfp_fmaxf
@@ -3835,7 +3837,7 @@ Local Symbols
 <BR>[Called By]<UL><LI><a href="#[fc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_control_step
 </UL>
 
-<P><STRONG><a name="[1cc]"></a>dm_decode</STRONG> (Thumb, 34 bytes, Stack size 0 bytes, dm_motor.o(i.dm_decode))
+<P><STRONG><a name="[1cb]"></a>dm_decode</STRONG> (Thumb, 34 bytes, Stack size 0 bytes, dm_motor.o(i.dm_decode))
 <BR><BR>[Called By]<UL><LI><a href="#[12d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_can_rx_irq
 </UL>
 
@@ -3851,15 +3853,15 @@ Local Symbols
 <BR>[Called By]<UL><LI><a href="#[1c6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;control_remote_motors
 </UL>
 
-<P><STRONG><a name="[1cb]"></a>dm_poll_one</STRONG> (Thumb, 46 bytes, Stack size 16 bytes, dm_motor.o(i.dm_poll_one))
+<P><STRONG><a name="[1cc]"></a>dm_poll_one</STRONG> (Thumb, 46 bytes, Stack size 16 bytes, dm_motor.o(i.dm_poll_one))
 <BR><BR>[Stack]<UL><LI>Max Depth = 124<LI>Call Chain = dm_poll_one &rArr; dm_motor_request_feedback &rArr; dm_send &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
 </UL>
 <BR>[Calls]<UL><LI><a href="#[1d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_request_feedback
 </UL>
-<BR>[Called By]<UL><LI><a href="#[1cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_test_idle
+<BR>[Called By]<UL><LI><a href="#[fc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_control_step
+<LI><a href="#[1cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_test_idle
 <LI><a href="#[1d0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_test_enable_step
 <LI><a href="#[1ce]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_test_disable_step
-<LI><a href="#[1c6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;control_remote_motors
 </UL>
 
 <P><STRONG><a name="[1d5]"></a>dm_send</STRONG> (Thumb, 98 bytes, Stack size 56 bytes, dm_motor.o(i.dm_send))
@@ -3887,7 +3889,7 @@ Local Symbols
 <BR><BR>[Stack]<UL><LI>Max Depth = 156<LI>Call Chain = dm_test_disable_step &rArr; dm_poll_one &rArr; dm_motor_request_feedback &rArr; dm_send &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
 </UL>
 <BR>[Calls]<UL><LI><a href="#[1d2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_disable
-<LI><a href="#[1cb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_poll_one
+<LI><a href="#[1cc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_poll_one
 </UL>
 <BR>[Called By]<UL><LI><a href="#[fc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_control_step
 </UL>
@@ -3897,7 +3899,7 @@ Local Symbols
 </UL>
 <BR>[Calls]<UL><LI><a href="#[1cd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_test_stop
 <LI><a href="#[1d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_test_move_step
-<LI><a href="#[1cb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_poll_one
+<LI><a href="#[1cc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_poll_one
 </UL>
 <BR>[Called By]<UL><LI><a href="#[fc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_control_step
 </UL>
@@ -3907,7 +3909,7 @@ Local Symbols
 </UL>
 <BR>[Calls]<UL><LI><a href="#[1c8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_enable
 <LI><a href="#[1cd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_test_stop
-<LI><a href="#[1cb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_poll_one
+<LI><a href="#[1cc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_poll_one
 <LI><a href="#[1d6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__ARM_isfinitef
 </UL>
 <BR>[Called By]<UL><LI><a href="#[fc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;dm_motor_control_step

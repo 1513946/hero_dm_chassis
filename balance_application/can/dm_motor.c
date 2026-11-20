@@ -14,6 +14,7 @@
 /* 点动和遥控共用发送周期；以下固定速度和增益用于 Watch 点动测试。 */
 #define DM_TEST_ALL_MOTORS ((1U << DM_MOTOR_COUNT) - 1U)
 #define DM_TEST_PERIOD_MS 10U
+#define DM_REMOTE_FEEDBACK_DELAY_MS 2U
 #define DM_TEST_FEEDBACK_MS 200U
 #define DM_TEST_POLL_FRESH_MS 120U
 #define DM_TEST_ENABLE_MS 150U
@@ -52,7 +53,7 @@ volatile float dm_remote_speed_rad_s = 0.50f;    /* 满杆时目标角的变化�
  */
 volatile uint8_t dm_gravity_enable = 1U;
 volatile float dm_gravity_scale = 1.0f;
-volatile float dm_gravity_load_kg[DM_MOTOR_COUNT] = {6.0f, 6.0f, 2.5f, 2.5f};
+volatile float dm_gravity_load_kg[DM_MOTOR_COUNT] = {4.5f, 4.5f, 2.5f, 2.5f};
 volatile float dm_gravity_torque_out[DM_MOTOR_COUNT];
 /* 在线调试用：最近一次下发的目标角和“目标-实际”误差，均为电机侧 rad。 */
 volatile float dm_target_position_out[DM_MOTOR_COUNT];
@@ -129,6 +130,9 @@ static uint8_t remote_disable_sent_mask;
 /* 上一周期真正推进过目标角的电机位，用于区分重新推进的首拍。 */
 static uint8_t remote_driven_last;
 static uint32_t remote_stop_feedback_count[DM_MOTOR_COUNT];
+/* 遥控控制帧下发后，在本周期内错峰查询一台电机。 */
+static uint8_t remote_feedback_request_mask;
+static uint32_t remote_feedback_request_start_ms;
 /* 重力前馈的渐入系数，0→1 对应使能后的爬升过程。 */
 static float gravity_ramp[DM_MOTOR_COUNT];
 
@@ -716,7 +720,7 @@ static void control_remote_motors(uint8_t enabled_motors, uint8_t selected_motor
     const float motion_fraction = (float)joint_motion_request / 100.0f;
     /* 按配置的角度变化速率和控制周期计算目标角增量。 */
     const float position_step = motion_fraction * dm_remote_speed_rad_s * (DM_TEST_PERIOD_MS / 1000.0f);
-    /* 汇总本轮需要请求反馈的电机，循环结束后统一轮询。 */
+    /* 汇总本轮需要错峰查询反馈的电机。 */
     uint8_t feedback_request_mask = 0U;
     uint8_t index;
     uint8_t driven_mask = 0U;
@@ -832,8 +836,11 @@ static void control_remote_motors(uint8_t enabled_motors, uint8_t selected_motor
     /* 记录本轮真正推进过目标的电机，供下一周期判断重新推进的首拍。 */
     remote_driven_last = driven_mask;
 
-    /* 统一请求本轮需要更新的反馈。 */
-    dm_poll_one(feedback_request_mask);
+    remote_feedback_request_mask = feedback_request_mask;
+    if (feedback_request_mask != 0U)
+    {
+        remote_feedback_request_start_ms = HAL_GetTick();
+    }
 }
 
 /* 周期性更新 CAN 诊断和反馈快照，并调度遥控或点动状态机。 */
@@ -846,10 +853,26 @@ void dm_motor_control_step(bool use_remote_control, uint8_t enabled_motors,
     uint32_t primask;
     uint8_t index;
 
-    if (dm_can_diag.started == 0U || now - last_step_ms < DM_TEST_PERIOD_MS)
+    if (dm_can_diag.started == 0U)
     {
         return;
     }
+    if (now - last_step_ms < DM_TEST_PERIOD_MS)
+    {
+        /* 待控制帧和紧跟的反馈通过总线后，再发送低优先级的 0x7FF。 */
+        if (use_remote_control && remote_feedback_request_mask != 0U &&
+            dm_can_diag.bus_off == 0U &&
+            now - remote_feedback_request_start_ms >= DM_REMOTE_FEEDBACK_DELAY_MS &&
+            hfdcan3.Instance->TXBRP == 0U)
+        {
+            dm_poll_one(remote_feedback_request_mask);
+            remote_feedback_request_mask = 0U;
+        }
+        return;
+    }
+
+    /* 若上轮发送队列一直忙，按本轮最新反馈重新计算待查询电机。 */
+    remote_feedback_request_mask = 0U;
     last_step_ms = now;
     HAL_FDCAN_GetErrorCounters(&hfdcan3, &errors);
     dm_can_diag.tx_error_counter = errors.TxErrorCnt;
