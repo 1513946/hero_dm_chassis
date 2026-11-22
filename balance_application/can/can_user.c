@@ -395,7 +395,7 @@ void read_gimbal_chassis_command(chassis_c_get_data_t *command)
     command_age_ms = HAL_GetTick() - gimbal_chassis_command_received_at_ms;
     __set_PRIMASK(interrupt_mask);
 
-    /* 断流时清空控制副本。保留 V1 标记，让达妙遥控分支继续处理失能。 */
+    /* 断流时清空控制量，只在指令副本中保留最近的协议标记。 */
     if (command_age_ms >= GIMBAL_CHASSIS_COMMAND_TIMEOUT_MS)
     {
         const bool uses_climb_protocol = command->uses_climb_protocol;

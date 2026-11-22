@@ -22,11 +22,6 @@
 /* 左拨杆下的爬阶档：四台 DM 电机全部保持使能。 */
 #define ALL_CLIMB_MOTORS (FRONT_LEFT_MOTOR | FRONT_RIGHT_MOTOR | REAR_LEFT_MOTOR | REAR_RIGHT_MOTOR)
 
-/* climb_mode 的释放保持时间。
- * 云台换设备或协议抖动会让 climb_mode 短暂掉 0；这段时间内继续让四台 DM 电机
- * 使能持位，避免每抖一次就整组失能、再逐台重建。连续性掉 0 超过该时间才真正退出。 */
-#define CLIMB_MODE_HOLD_MS 1000U
-
 #define Remote_Deadband_Limit(mag_input, msg_output, dead_control)   \
 {                                                                    \
     if (mag_input > dead_control || mag_input < -dead_control)       \
@@ -74,12 +69,6 @@ chassis_control_t hero_chassis;
 /* 本轮底盘任务的指令副本，麦轮和摆臂使用同一次读取的结果。 */
 static chassis_c_get_data_t gimbal_chassis_command;
 
-/* 爬阶使能消抖诊断（Watch 用）：看出 climb_mode 掉 0 的频率和时长，
- * 用 climb_mode_max_off_ms 反推 CLIMB_MODE_HOLD_MS 该设多大。 */
-volatile uint32_t climb_mode_off_count   = 0U;  /* climb_mode 掉 0 的次数 */
-volatile uint32_t climb_mode_last_off_ms = 0U;  /* 最近一次掉 0 的持续时长 */
-volatile uint32_t climb_mode_max_off_ms  = 0U;  /* 最长一次掉 0 的持续时长 */
-
 static uint8_t select_climb_motors(const chassis_c_get_data_t *command)
 {
     uint8_t group_mask;
@@ -115,62 +104,6 @@ static uint8_t select_climb_motors(const chassis_c_get_data_t *command)
     }
 }
 
-/* climb_mode 消抖/保持。
- * 任意一帧 climb_mode=1 都会重新计时；掉 0 后在 CLIMB_MODE_HOLD_MS 内仍返回 true，
- * 四台 DM 电机继续持位。持续掉 0 超过该时间才返回 false，走真正的失能流程。 */
-static bool climb_mode_held(const chassis_c_get_data_t *command, uint32_t now)
-{
-    static bool held = false;
-    static bool prev_climb = false;
-    static uint32_t last_on_ms = 0U;
-    static uint32_t off_start_ms = 0U;
-
-    if (command->climb_mode)
-    {
-        if (!prev_climb)
-        {
-            /* 短暂掉 0 后恢复：记录这次抖动的时长。 */
-            if (held)
-            {
-                const uint32_t off_ms = now - off_start_ms;
-
-                climb_mode_off_count++;
-                climb_mode_last_off_ms = off_ms;
-                if (off_ms > climb_mode_max_off_ms)
-                {
-                    climb_mode_max_off_ms = off_ms;
-                }
-            }
-            prev_climb = true;
-        }
-        held = true;
-        last_on_ms = now;
-        return true;
-    }
-
-    if (prev_climb)
-    {
-        prev_climb = false;
-        off_start_ms = now;
-    }
-
-    if (!held)
-    {
-        return false;
-    }
-
-    if (now - last_on_ms < CLIMB_MODE_HOLD_MS)
-    {
-        return true;
-    }
-
-    /* 连续掉 0 超过保持时间：真正退出爬阶。 */
-    climb_mode_off_count++;
-    climb_mode_last_off_ms = now - off_start_ms;
-    held = false;
-    return false;
-}
-
 void Chassis_Task(void *argument)
 {
     (void)argument;
@@ -199,14 +132,12 @@ void Chassis_Task(void *argument)
                         hero_chassis.chassis_motor[3].give_current);
         /* 麦轮指令走 CAN1。这里把摆臂选择和伸收量交给 CAN3 电机驱动。
          * 左拨杆下（climb_mode）时四台 DM 电机全部使能，遥控只对选中的电机动目标角，
-         * 其余电机冻结目标持位。climb_mode 短暂掉 0 时保持使能，不跟着失能；
-         * 保持期间同时把选择和伸收量清零，目标角保持冻结。 */
+         * 其余电机冻结目标持位。climb_mode 为 0 时请求失能。 */
         {
-            const bool climb_enabled = climb_mode_held(&gimbal_chassis_command, HAL_GetTick());
+            const bool climb_enabled = gimbal_chassis_command.climb_mode;
 
-            dm_motor_control_step(gimbal_chassis_command.uses_climb_protocol,
-                                  climb_enabled ? ALL_CLIMB_MOTORS : 0U,
-                                  climb_enabled ? select_climb_motors(&gimbal_chassis_command) : 0U,
+            dm_motor_control_step(climb_enabled ? ALL_CLIMB_MOTORS : 0U,
+                                  select_climb_motors(&gimbal_chassis_command),
                                   climb_enabled ? gimbal_chassis_command.joint_motion_request : 0);
         }
         osDelay(1);

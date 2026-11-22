@@ -1,6 +1,5 @@
 hero_dm_chassis\dm_motor.o: ..\balance_application\can\dm_motor.c
 hero_dm_chassis\dm_motor.o: ..\balance_application\can\dm_motor.h
-hero_dm_chassis\dm_motor.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
 hero_dm_chassis\dm_motor.o: ../Core/Inc/fdcan.h
 hero_dm_chassis\dm_motor.o: ../Core/Inc/main.h
 hero_dm_chassis\dm_motor.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h
@@ -46,3 +45,4 @@ hero_dm_chassis\dm_motor.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_ti
 hero_dm_chassis\dm_motor.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h
 hero_dm_chassis\dm_motor.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h
 hero_dm_chassis\dm_motor.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
+hero_dm_chassis\dm_motor.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h

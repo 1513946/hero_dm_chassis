@@ -1,43 +1,9 @@
 #ifndef DM_MOTOR_H
 #define DM_MOTOR_H
 
-#include <stdbool.h>
 #include "fdcan.h"
 
 #define DM_MOTOR_COUNT 4U
-
-typedef enum
-{
-    DM_TEST_IDLE = 0,
-    DM_TEST_ENABLING,
-    DM_TEST_MOVING,
-    DM_TEST_DISABLING
-} dm_test_state_t;
-
-typedef enum
-{
-    DM_TEST_NO_STOP = 0,
-    DM_TEST_STOP_REQUEST,
-    DM_TEST_STOP_TIME_LIMIT,
-    DM_TEST_STOP_NOT_READY,
-    DM_TEST_STOP_TX_FAILED,
-    DM_TEST_STOP_FEEDBACK_TIMEOUT,
-    DM_TEST_STOP_MOTOR_STATE,
-    DM_TEST_STOP_POSITION,
-    DM_TEST_STOP_BUS_OFF
-} dm_test_stop_t;
-
-typedef struct
-{
-    uint32_t motor_mask;                 /* Watch: bit 0..3 selects motors for polling. */
-    uint32_t run;                        /* Watch: 1 starts one bounded test; 0 stops it. */
-    float offset_rad[DM_MOTOR_COUNT];      /* Watch: latched when the test starts. */
-    dm_test_state_t state;
-    dm_test_stop_t stop_reason;
-    uint32_t active_mask;
-    uint32_t fault_mask;
-    uint32_t disable_pending_mask;
-} dm_test_t;
 
 typedef struct
 {
@@ -46,8 +12,6 @@ typedef struct
     float torque_nm;
     uint32_t rx_count;
     uint32_t last_rx_ms;
-    /* 只在 Watch 点动的 MOVING 阶段统计，单位 ms。 */
-    uint32_t max_move_rx_gap_ms;
     uint8_t state;
     uint8_t mos_temp_c;
     uint8_t coil_temp_c;
@@ -72,7 +36,6 @@ typedef struct
     uint32_t rx_error_counter;
 } dm_can_diag_t;
 
-extern volatile dm_test_t dm_test;
 extern volatile dm_feedback_t dm_feedback[DM_MOTOR_COUNT];
 extern volatile dm_can_diag_t dm_can_diag;
 /* 遥控机械臂在线调参，四台共用；在 Keil Watch 的 Value 列修改。 */
@@ -104,7 +67,7 @@ HAL_StatusTypeDef dm_motor_send_mit(uint8_t index, float position, float velocit
                                    float kp, float kd, float torque);
 /* 底盘任务周期调用。enabled_motors 的 bit0 到 bit3 是本轮保持使能的电机；
  * selected_motors 是其子集，表示允许遥控器动目标角的电机。 */
-void dm_motor_control_step(bool use_remote_control, uint8_t enabled_motors,
-                           uint8_t selected_motors, int8_t joint_motion_request);
+void dm_motor_control_step(uint8_t enabled_motors, uint8_t selected_motors,
+                           int8_t joint_motion_request);
 
 #endif

@@ -1,6 +1,7 @@
 #include "dm_motor.h"
 
 #include <math.h>
+#include <stdbool.h>
 
 //dm电机的id和3508麦轮的id是一一对应的
 /*
@@ -11,21 +12,9 @@
 
 */
 
-/* 点动和遥控共用发送周期；以下固定速度和增益用于 Watch 点动测试。 */
-#define DM_TEST_ALL_MOTORS ((1U << DM_MOTOR_COUNT) - 1U)
-#define DM_TEST_PERIOD_MS 10U
+#define DM_CONTROL_PERIOD_MS 10U
 #define DM_REMOTE_FEEDBACK_DELAY_MS 2U
-#define DM_TEST_FEEDBACK_MS 200U
-#define DM_TEST_POLL_FRESH_MS 120U
-#define DM_TEST_ENABLE_MS 150U
-#define DM_TEST_DISABLE_MS 150U
-#define DM_TEST_DURATION_MS 5000U
-/* 点动输入的偏移上限，以及点动期间的实测位移保护。 */
-#define DM_TEST_OFFSET_RAD 1.0f
-#define DM_TEST_TRAVEL_RAD 0.18f
-#define DM_TEST_RAMP_RAD_S 0.40f    // 速度变化率，rad/s
-#define DM_TEST_KP 10.0f
-#define DM_TEST_KD 0.25f
+#define DM_FEEDBACK_TIMEOUT_MS 200U
 /* 遥控推杆时限制目标角与反馈角的差，避免卡住后持续累积误差。 */
 #define DM_REMOTE_POSITION_ERROR_RAD 0.20f
 
@@ -41,8 +30,8 @@
  * Keil Watch 中修改这些变量即可生效；调好后把记录值写回下面的初始值。
  * Kp、Kd 的协议范围分别为 0～500、0～5；速度使用非负值，单位 rad/s。
  */
-volatile float dm_remote_kp = 20.0f;             /* 位置增益，影响跟随力度。 */
-volatile float dm_remote_kd = 1.0f;             /* 阻尼增益，影响运动阻尼。 */
+volatile float dm_remote_kp = 200.0f;             /* 位置增益，影响跟随力度。 */
+volatile float dm_remote_kd = 10.0f;             /* 阻尼增益，影响运动阻尼。 */
 volatile float dm_remote_speed_rad_s = 0.50f;    /* 满杆时目标角的变化速度。 */
 
 /* 重力前馈在线调参。
@@ -53,7 +42,7 @@ volatile float dm_remote_speed_rad_s = 0.50f;    /* 满杆时目标角的变化�
  */
 volatile uint8_t dm_gravity_enable = 1U;
 volatile float dm_gravity_scale = 1.0f;
-volatile float dm_gravity_load_kg[DM_MOTOR_COUNT] = {4.5f, 4.5f, 2.5f, 2.5f};
+volatile float dm_gravity_load_kg[DM_MOTOR_COUNT] = {0.0f, 0.0f, 0.0f, 0.0f};
 volatile float dm_gravity_torque_out[DM_MOTOR_COUNT];
 /* 在线调试用：最近一次下发的目标角和“目标-实际”误差，均为电机侧 rad。 */
 volatile float dm_target_position_out[DM_MOTOR_COUNT];
@@ -107,23 +96,18 @@ typedef struct
 static const dm_angle_limit_t dm_angle_limit[DM_MOTOR_COUNT] =
 {
     /*       a        b      c       d       */
-    {-12.5f,     -4.0f,  1.0f, 12.5f},     /* 下标 0，前 4340，ID 1 */
-    {-12.5f,     -1.0f,  4.0f, 12.5f},     /* 下标 1，前 4340，ID 2 */
-    {-3.141549f, -1.1f,  0.0f,  3.141549f}, /* 下标 2，后 8009，ID 3 */
+    {-12.5f,     -2.2f,  2.9f, 12.5f},     /* 下标 0，前 4340，ID 1 */
+    {-12.5f,     -2.9f,  2.2f, 12.5f},     /* 下标 1，前 4340，ID 2 */
+    {-3.141549f, -1.1f,  -0.0f,  3.141549f}, /* 下标 2，后 8009，ID 3 */
     {-3.141549f,  0.0f,  1.1f,  3.141549f}, /* 下标 3，后 8009，ID 4 */
 };
 
-volatile dm_test_t dm_test;
 volatile dm_feedback_t dm_feedback[DM_MOTOR_COUNT];
 volatile dm_can_diag_t dm_can_diag;
 volatile uint8_t dm_remote_active_mask;
 
-static uint32_t phase_start_ms;
 static uint32_t last_step_ms;
 static uint8_t next_poll_index;
-static uint32_t feedback_baseline[DM_MOTOR_COUNT];
-static float initial_angle[DM_MOTOR_COUNT];
-static float requested_offset[DM_MOTOR_COUNT];
 /* 每轴单独保存遥控目标角及失能前的接收计数，用新反馈确认失能。 */
 static float remote_target_position[DM_MOTOR_COUNT];
 static uint8_t remote_disable_sent_mask;
@@ -315,7 +299,7 @@ void dm_motor_can_rx_irq(FDCAN_HandleTypeDef *hfdcan, uint32_t rx_interrupts)
 
     while (HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0) != 0U)
     {
-        uint32_t index, now, gap;
+        uint32_t index, now;
         const dm_config_t *config;
         volatile dm_feedback_t *feedback;
 
@@ -345,12 +329,6 @@ void dm_motor_can_rx_irq(FDCAN_HandleTypeDef *hfdcan, uint32_t rx_interrupts)
 
         feedback = &dm_feedback[index];
         now = HAL_GetTick();
-        gap = now - feedback->last_rx_ms;
-        if (dm_test.state == DM_TEST_MOVING && (dm_test.active_mask & (1U << index)) != 0U &&
-            gap > feedback->max_move_rx_gap_ms)
-        {
-            feedback->max_move_rx_gap_ms = gap;
-        }
         /* 位置占 16 位，速度和扭矩各占 12 位。状态在 data[0] 的高四位。 */
         feedback->position_rad = dm_decode((uint16_t)((data[1] << 8) | data[2]), config->pmax, 0xFFFFU);
         feedback->velocity_rad_s = dm_decode((uint16_t)((data[3] << 4) | (data[4] >> 4)), config->vmax, 0xFFFU);
@@ -413,226 +391,6 @@ static void dm_poll_one(uint32_t mask)
     /* 若 mask 中没有待查询电机，本次扫描不会发送请求。 */
 }
 
-/* 停止 Watch 点动，取消排队的运动帧并对已激活电机发起失能流程。 */
-static void dm_test_stop(dm_test_stop_t reason, uint32_t mask, uint32_t now,
-                         const dm_feedback_t *snapshot)
-{
-    uint8_t index;
-
-    dm_test.run = 0U;
-    dm_test.stop_reason = reason;
-    dm_test.fault_mask = mask;
-    dm_test.disable_pending_mask = dm_test.active_mask;
-    dm_test.state = DM_TEST_DISABLING;
-    phase_start_ms = now;
-
-    /* Drop any pending motion commands before sending disable. */
-    (void)HAL_FDCAN_AbortTxRequest(&hfdcan3, hfdcan3.Instance->TXBRP);
-    for (index = 0U; index < DM_MOTOR_COUNT; index++)
-    {
-        feedback_baseline[index] = snapshot[index].rx_count;
-        if ((dm_test.active_mask & (1U << index)) != 0U)
-        {
-            (void)dm_motor_disable(index);
-        }
-    }
-}
-
-/* 在空闲态检查点动条件，并锁存参与电机的起始角度和目标偏移。 */
-static void dm_test_idle(uint32_t mask, uint32_t now, const dm_feedback_t *snapshot)
-{
-    uint8_t index;
-    uint32_t not_ready = 0U;
-
-    if (dm_test.run != 0U)
-    {
-        for (index = 0U; index < DM_MOTOR_COUNT; index++)
-        {
-            float offset;
-
-            if ((mask & (1U << index)) == 0U)
-            {
-                continue;
-            }
-            offset = dm_test.offset_rad[index];
-            if (snapshot[index].rx_count == 0U || now - snapshot[index].last_rx_ms >= DM_TEST_POLL_FRESH_MS ||
-                snapshot[index].state != 0U || !isfinite(offset) || fabsf(offset) > DM_TEST_OFFSET_RAD ||
-                fabsf(snapshot[index].position_rad) + DM_TEST_TRAVEL_RAD >= dm_config[index].pmax)
-            {
-                not_ready |= 1U << index;
-            }
-            initial_angle[index] = snapshot[index].position_rad;
-            requested_offset[index] = offset;
-            feedback_baseline[index] = snapshot[index].rx_count;
-            dm_feedback[index].max_move_rx_gap_ms = 0U;
-        }
-
-        if (mask != 0U && not_ready == 0U && dm_test.disable_pending_mask == 0U)
-        {
-            dm_test.stop_reason = DM_TEST_NO_STOP;
-            dm_test.fault_mask = 0U;
-            dm_test.active_mask = mask;
-            dm_test.state = DM_TEST_ENABLING;
-            phase_start_ms = now;
-            for (index = 0U; index < DM_MOTOR_COUNT; index++)
-            {
-                if ((mask & (1U << index)) != 0U && dm_motor_enable(index) != HAL_OK)
-                {
-                    dm_test_stop(DM_TEST_STOP_TX_FAILED, 1U << index, now, snapshot);
-                    break;
-                }
-            }
-            return;
-        }
-
-        dm_test.run = 0U;
-        dm_test.stop_reason = DM_TEST_STOP_NOT_READY;
-        dm_test.fault_mask = not_ready | dm_test.disable_pending_mask;
-    }
-
-    for (index = 0U; index < DM_MOTOR_COUNT; index++)
-    {
-        const uint32_t bit = 1U << index;
-
-        if ((dm_test.disable_pending_mask & bit) != 0U &&
-            snapshot[index].rx_count != feedback_baseline[index] && snapshot[index].state == 0U &&
-            now - snapshot[index].last_rx_ms < DM_TEST_POLL_FRESH_MS)
-        {
-            dm_test.disable_pending_mask &= ~bit;
-        }
-    }
-    /* Leave unconfirmed drives silent so their own CAN timeout can expire. */
-    dm_poll_one(mask & ~dm_test.disable_pending_mask);
-}
-
-static void dm_test_move_step(uint32_t now, const dm_feedback_t *snapshot);
-
-/* 等待所有参与电机返回新的使能反馈，超时或异常时停止测试。 */
-static void dm_test_enable_step(uint32_t now, const dm_feedback_t *snapshot)
-{
-    uint8_t index;
-    uint32_t awaiting = 0U;
-
-    for (index = 0U; index < DM_MOTOR_COUNT; index++)
-    {
-        const uint32_t bit = 1U << index;
-
-        if ((dm_test.active_mask & bit) == 0U)
-        {
-            continue;
-        }
-        if (snapshot[index].state > 1U)
-        {
-            dm_test_stop(DM_TEST_STOP_MOTOR_STATE, bit, now, snapshot);
-            return;
-        }
-        if (snapshot[index].rx_count == feedback_baseline[index] || snapshot[index].state != 1U ||
-            now - snapshot[index].last_rx_ms >= DM_TEST_POLL_FRESH_MS)
-        {
-            awaiting |= bit;
-        }
-    }
-    /* 所有参与轴都返回新的使能反馈后，才开始发 MIT 位置指令。 */
-    if (awaiting == 0U)
-    {
-        phase_start_ms = now;
-        dm_test.state = DM_TEST_MOVING;
-        dm_test_move_step(now, snapshot);
-        return;
-    }
-    if (now - phase_start_ms >= DM_TEST_ENABLE_MS)
-    {
-        dm_test_stop(DM_TEST_STOP_FEEDBACK_TIMEOUT, awaiting, now, snapshot);
-        return;
-    }
-    dm_poll_one(awaiting);
-}
-
-/* 执行点动位置控制，并监测反馈超时、电机状态和行程限制。 */
-static void dm_test_move_step(uint32_t now, const dm_feedback_t *snapshot)
-{
-    uint8_t index;
-    float ramp = (float)(now - phase_start_ms) * (DM_TEST_RAMP_RAD_S / 1000.0f);
-
-    if (now - phase_start_ms >= DM_TEST_DURATION_MS)
-    {
-        dm_test_stop(DM_TEST_STOP_TIME_LIMIT, 0U, now, snapshot);
-        return;
-    }
-
-    for (index = 0U; index < DM_MOTOR_COUNT; index++)
-    {
-        const uint32_t bit = 1U << index;
-
-        if ((dm_test.active_mask & bit) == 0U)
-        {
-            continue;
-        }
-        if (now - snapshot[index].last_rx_ms >= DM_TEST_FEEDBACK_MS)
-        {
-            dm_test_stop(DM_TEST_STOP_FEEDBACK_TIMEOUT, bit, now, snapshot);
-            return;
-        }
-        if (snapshot[index].state != 1U)
-        {
-            dm_test_stop(DM_TEST_STOP_MOTOR_STATE, bit, now, snapshot);
-            return;
-        }
-        if (fabsf(snapshot[index].position_rad - initial_angle[index]) > DM_TEST_TRAVEL_RAD)
-        {
-            dm_test_stop(DM_TEST_STOP_POSITION, bit, now, snapshot);
-            return;
-        }
-    }
-
-    for (index = 0U; index < DM_MOTOR_COUNT; index++)
-    {
-        const uint32_t bit = 1U << index;
-        const float offset = fminf(ramp, fmaxf(-ramp, requested_offset[index]));
-
-        if ((dm_test.active_mask & bit) != 0U &&
-            dm_motor_send_mit(index, initial_angle[index] + offset, 0.0f, DM_TEST_KP, DM_TEST_KD, 0.0f) != HAL_OK)
-        {
-            dm_test_stop(DM_TEST_STOP_TX_FAILED, bit, now, snapshot);
-            return;
-        }
-    }
-}
-
-/* 重发失能命令并等待确认反馈，随后结束点动的失能阶段。 */
-static void dm_test_disable_step(uint32_t now, const dm_feedback_t *snapshot)
-{
-    uint8_t index;
-
-    dm_test.run = 0U;
-    for (index = 0U; index < DM_MOTOR_COUNT; index++)
-    {
-        const uint32_t bit = 1U << index;
-
-        if ((dm_test.disable_pending_mask & bit) == 0U)
-        {
-            continue;
-        }
-        if (snapshot[index].rx_count != feedback_baseline[index] && snapshot[index].state == 0U &&
-            now - snapshot[index].last_rx_ms < DM_TEST_POLL_FRESH_MS)
-        {
-            dm_test.disable_pending_mask &= ~bit;
-        }
-        else if (now - phase_start_ms < DM_TEST_DISABLE_MS)
-        {
-            (void)dm_motor_disable(index);
-        }
-    }
-    if (now - phase_start_ms < DM_TEST_DISABLE_MS)
-    {
-        dm_poll_one(dm_test.disable_pending_mask);
-    }
-    if (dm_test.disable_pending_mask == 0U || now - phase_start_ms >= DM_TEST_DISABLE_MS)
-    {
-        dm_test.active_mask = 0U;
-        dm_test.state = DM_TEST_IDLE;
-    }
-}
 /* 计算一台电机的重力前馈力矩，返回值是电机侧力矩，单位 N·m。
  * motor_angle_rad 使用该轴的目标角（电机原始坐标，rad）。
  *
@@ -719,7 +477,7 @@ static void control_remote_motors(uint8_t enabled_motors, uint8_t selected_motor
     /* 将摇杆请求（-100～100）换算为本控制周期内的角度增量。 */
     const float motion_fraction = (float)joint_motion_request / 100.0f;
     /* 按配置的角度变化速率和控制周期计算目标角增量。 */
-    const float position_step = motion_fraction * dm_remote_speed_rad_s * (DM_TEST_PERIOD_MS / 1000.0f);
+    const float position_step = motion_fraction * dm_remote_speed_rad_s * (DM_CONTROL_PERIOD_MS / 1000.0f);
     /* 汇总本轮需要错峰查询反馈的电机。 */
     uint8_t feedback_request_mask = 0U;
     uint8_t index;
@@ -736,7 +494,7 @@ static void control_remote_motors(uint8_t enabled_motors, uint8_t selected_motor
         const bool was_driven = (remote_driven_last & motor_bit) != 0U;
         /* 必须已收到过反馈，且反馈未超过有效期。 */
         const bool feedback_is_fresh = feedback[index].rx_count != 0U &&
-            now - feedback[index].last_rx_ms < DM_TEST_FEEDBACK_MS;
+            now - feedback[index].last_rx_ms < DM_FEEDBACK_TIMEOUT_MS;
 
         /* 不在使能集合内：走失能流程（退出爬阶或该轴被剔除）。 */
         if (!enabled)
@@ -821,7 +579,7 @@ static void control_remote_motors(uint8_t enabled_motors, uint8_t selected_motor
         else if (gravity_ramp[index] < 1.0f)
         {
             gravity_ramp[index] = fminf(1.0f, gravity_ramp[index] +
-                                        (float)DM_TEST_PERIOD_MS / (float)DM_GRAVITY_RAMP_MS);
+                                        (float)DM_CONTROL_PERIOD_MS / (float)DM_GRAVITY_RAMP_MS);
         }
         /* 所有使能的电机（含未选中持位的）都持续下发 MIT 帧，
          * 让驱动器内部位置环持续锁位，并避免通信超时自行失能。 */
@@ -843,9 +601,9 @@ static void control_remote_motors(uint8_t enabled_motors, uint8_t selected_motor
     }
 }
 
-/* 周期性更新 CAN 诊断和反馈快照，并调度遥控或点动状态机。 */
-void dm_motor_control_step(bool use_remote_control, uint8_t enabled_motors,
-                           uint8_t selected_motors, int8_t joint_motion_request)
+/* 周期性更新 CAN 诊断和反馈快照，并执行遥控控制。 */
+void dm_motor_control_step(uint8_t enabled_motors, uint8_t selected_motors,
+                           int8_t joint_motion_request)
 {
     dm_feedback_t snapshot[DM_MOTOR_COUNT];
     FDCAN_ErrorCountersTypeDef errors;
@@ -857,10 +615,10 @@ void dm_motor_control_step(bool use_remote_control, uint8_t enabled_motors,
     {
         return;
     }
-    if (now - last_step_ms < DM_TEST_PERIOD_MS)
+    if (now - last_step_ms < DM_CONTROL_PERIOD_MS)
     {
         /* 待控制帧和紧跟的反馈通过总线后，再发送低优先级的 0x7FF。 */
-        if (use_remote_control && remote_feedback_request_mask != 0U &&
+        if (remote_feedback_request_mask != 0U &&
             dm_can_diag.bus_off == 0U &&
             now - remote_feedback_request_start_ms >= DM_REMOTE_FEEDBACK_DELAY_MS &&
             hfdcan3.Instance->TXBRP == 0U)
@@ -890,49 +648,8 @@ void dm_motor_control_step(bool use_remote_control, uint8_t enabled_motors,
 
     if (dm_can_diag.bus_off != 0U)
     {
-        if (dm_test.active_mask != 0U && dm_test.state != DM_TEST_DISABLING)
-        {
-            dm_test_stop(DM_TEST_STOP_BUS_OFF, dm_test.active_mask, now, snapshot);
-        }
-        dm_test.run = 0U;
-        if (dm_test.state == DM_TEST_DISABLING)
-        {
-            dm_test_disable_step(now, snapshot);
-        }
         return;
     }
 
-    /* V1 遥控优先。正在 Watch 点动时先走完失能流程，再交给遥控。 */
-    if (use_remote_control)
-    {
-        dm_test.run = 0U;
-        dm_test.motor_mask = 0U;
-        if (dm_test.state == DM_TEST_IDLE && dm_test.disable_pending_mask == 0U)
-        {
-            control_remote_motors(enabled_motors, selected_motors, joint_motion_request, now, snapshot);
-            return;
-        }
-    }
-
-    if ((dm_test.state == DM_TEST_ENABLING || dm_test.state == DM_TEST_MOVING) && dm_test.run == 0U)
-    {
-        dm_test_stop(DM_TEST_STOP_REQUEST, 0U, now, snapshot);
-        return;
-    }
-
-    switch (dm_test.state)
-    {
-    case DM_TEST_IDLE:
-        dm_test_idle(dm_test.motor_mask & DM_TEST_ALL_MOTORS, now, snapshot);
-        break;
-    case DM_TEST_ENABLING:
-        dm_test_enable_step(now, snapshot);
-        break;
-    case DM_TEST_MOVING:
-        dm_test_move_step(now, snapshot);
-        break;
-    case DM_TEST_DISABLING:
-        dm_test_disable_step(now, snapshot);
-        break;
-    }
+    control_remote_motors(enabled_motors, selected_motors, joint_motion_request, now, snapshot);
 }
