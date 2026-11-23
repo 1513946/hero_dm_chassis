@@ -30,7 +30,7 @@
  * Keil Watch 中修改这些变量即可生效；调好后把记录值写回下面的初始值。
  * Kp、Kd 的协议范围分别为 0～500、0～5；速度使用非负值，单位 rad/s。
  */
-volatile float dm_remote_kp = 200.0f;             /* 位置增益，影响跟随力度。 */
+volatile float dm_remote_kp = 300.0f;             /* 位置增益，影响跟随力度。 */
 volatile float dm_remote_kd = 10.0f;             /* 阻尼增益，影响运动阻尼。 */
 volatile float dm_remote_speed_rad_s = 0.50f;    /* 满杆时目标角的变化速度。 */
 
@@ -42,7 +42,7 @@ volatile float dm_remote_speed_rad_s = 0.50f;    /* 满杆时目标角的变化�
  */
 volatile uint8_t dm_gravity_enable = 1U;
 volatile float dm_gravity_scale = 1.0f;
-volatile float dm_gravity_load_kg[DM_MOTOR_COUNT] = {0.0f, 0.0f, 0.0f, 0.0f};
+volatile float dm_gravity_load_kg[DM_MOTOR_COUNT] = {3.0f, 3.0f, 0.0f, 0.0f};
 volatile float dm_gravity_torque_out[DM_MOTOR_COUNT];
 /* 在线调试用：最近一次下发的目标角和“目标-实际”误差，均为电机侧 rad。 */
 volatile float dm_target_position_out[DM_MOTOR_COUNT];

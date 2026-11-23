@@ -424,6 +424,7 @@ static void Chassis_Control_Cacl(chassis_control_t *mini_chassis_control_cacl)
 
     for (uint8_t i = 0; i < 4; i++)
     {
+        //P = K0 + K1·I + K2·ω + K3·I·ω + K4·I² + K5·ω²   
         mini_chassis_control_cacl->chassis_motor[i].motor_use_i     = mini_chassis_control_cacl->chassis_motor[i].give_current * MA_A;
         mini_chassis_control_cacl->chassis_motor[i].motor_w         = mini_chassis_control_cacl->chassis_motor[i].chassis_motor_feedback->speed_rpm * RPM_RADS;
         mini_chassis_control_cacl->chassis_motor[i].motor_use_power =
@@ -662,7 +663,7 @@ static void Chassis_Power_Speed_Control(chassis_control_t *hero_chassis_power_sp
         return;
     }
 
-    static fp32 rm_chassis_power_limit   = 55.0f;   /* p_max，来自裁判系统 */
+    static fp32 rm_chassis_power_limit   = 50.0f;   /* p_max，来自裁判系统 */
     static fp32 rm_chassis_power_buffer  = 60.0f;   /* p_buff，来自裁判系统 */
     static fp32 user_chassis_power       = 0.0f;    /* 当前所需功率 */
     static fp32 chassis_power_max        = 0.0f;    /* 最大可用功率 */

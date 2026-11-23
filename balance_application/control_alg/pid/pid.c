@@ -82,6 +82,10 @@ fp32 pid_calc(pid_type_def *user_pid,fp32 feed_back,fp32 set) //½øÐÐpid¼ÆËã pid½
 			user_pid->dbuf[1]=user_pid->dbuf[0];
 			user_pid->dbuf[0]=(user_pid->error[0]-2*user_pid->error[1]+user_pid->error[2]);
             user_pid->dout=user_pid->kd*user_pid->dbuf[0];  //Îó²îÎ¢·Ö
+            if (user_pid->max_iout != 0.0f)
+            {
+                LimitMax(user_pid->iout, user_pid->max_iout);  //»ý·ÖÏÞ·ù
+            }
             user_pid->out+=(user_pid->pout+user_pid->iout+user_pid->dout);
             LimitMax(user_pid->out,user_pid->max_out);  //Êä³öÏÞ·ù
         }
