@@ -466,18 +466,12 @@ static void stop_remote_motor(uint8_t index, bool feedback_is_fresh,
     }
 }
 
-/* 根据遥控使能集合和选择，更新目标角并控制电机。
- * enabled_motors：本轮保持使能的电机位（左拨杆下的爬阶档为四台）。
- * selected_motors：本轮允许遥控器在目标角上加减的电机位，是 enabled_motors 的子集。
- * 未选中但仍在使能集合内的电机：目标角冻结，持续下发 MIT 帧持位。 */
-static void control_remote_motors(uint8_t enabled_motors, uint8_t selected_motors,
-                                  int8_t joint_motion_request, uint32_t now,
+/* 使能的电机按各自的请求更新目标角，请求为 0 时继续下发 MIT 帧持位。 */
+static void control_remote_motors(uint8_t enabled_motors,
+                                  const int8_t arm_requests[DM_MOTOR_COUNT], uint32_t now,
                                   const dm_feedback_t *feedback)
 {
-    /* 将摇杆请求（-100～100）换算为本控制周期内的角度增量。 */
-    const float motion_fraction = (float)joint_motion_request / 100.0f;
-    /* 按配置的角度变化速率和控制周期计算目标角增量。 */
-    const float position_step = motion_fraction * dm_remote_speed_rad_s * (DM_CONTROL_PERIOD_MS / 1000.0f);
+    const float angle_per_request = dm_remote_speed_rad_s * (DM_CONTROL_PERIOD_MS / 1000.0f) / 127.0f;
     /* 汇总本轮需要错峰查询反馈的电机。 */
     uint8_t feedback_request_mask = 0U;
     uint8_t index;
@@ -488,8 +482,6 @@ static void control_remote_motors(uint8_t enabled_motors, uint8_t selected_motor
         const uint8_t motor_bit = 1U << index;
         /* 是否在本轮使能集合内。 */
         const bool enabled = (enabled_motors & motor_bit) != 0U;
-        /* 是否被遥控选中（允许动目标角）。 */
-        const bool selected = (selected_motors & motor_bit) != 0U;
         /* 上一周期是否真正推进过目标角（重新推进的首拍不做相对反馈限幅）。 */
         const bool was_driven = (remote_driven_last & motor_bit) != 0U;
         /* 必须已收到过反馈，且反馈未超过有效期。 */
@@ -536,12 +528,11 @@ static void control_remote_motors(uint8_t enabled_motors, uint8_t selected_motor
             continue;
         }
 
-        /* 只有被选中的电机才允许遥控器在目标角上直接加减；
-         * 未选中的电机保持 remote_target_position 不变，即持位。 */
-        if (selected && joint_motion_request != 0)
+        if (arm_requests[index] != 0)
         {
             /* 按电机安装方向修正增量，使摇杆方向与关节伸缩方向一致。 */
-            const float motor_position_step = position_step * dm_config[index].extension_direction;
+            const float motor_position_step = arm_requests[index] * angle_per_request *
+                dm_config[index].extension_direction;
             const float current_position = feedback[index].position_rad;
             const dm_angle_limit_t *limit = &dm_angle_limit[index];
             /* 直接比较原始反馈角，保留超过 ±π 时的位置和运动方向。 */
@@ -602,8 +593,8 @@ static void control_remote_motors(uint8_t enabled_motors, uint8_t selected_motor
 }
 
 /* 周期性更新 CAN 诊断和反馈快照，并执行遥控控制。 */
-void dm_motor_control_step(uint8_t enabled_motors, uint8_t selected_motors,
-                           int8_t joint_motion_request)
+void dm_motor_control_step(uint8_t enabled_motors,
+                           const int8_t arm_requests[DM_MOTOR_COUNT])
 {
     dm_feedback_t snapshot[DM_MOTOR_COUNT];
     FDCAN_ErrorCountersTypeDef errors;
@@ -651,5 +642,5 @@ void dm_motor_control_step(uint8_t enabled_motors, uint8_t selected_motors,
         return;
     }
 
-    control_remote_motors(enabled_motors, selected_motors, joint_motion_request, now, snapshot);
+    control_remote_motors(enabled_motors, arm_requests, now, snapshot);
 }

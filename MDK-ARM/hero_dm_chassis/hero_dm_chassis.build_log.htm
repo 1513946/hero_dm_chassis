@@ -27,39 +27,35 @@ Project File Date:  11/20/2026
 <h2>Output:</h2>
 *** Using Compiler 'V5.06 update 7 (build 960)', folder: 'D:\Keil5\ARM\ARMCC\Bin'
 Build target 'hero_dm_chassis'
-compiling pid.c...
-..\balance_application\control_alg\pid\pid.c(143): warning:  #1-D: last line of file ends without a newline
-  }
-..\balance_application\control_alg\pid\pid.c(143): warning:  #940-D: missing return statement at end of non-void function "pid_calc_gimbal" 
-  }
-..\balance_application\control_alg\pid\pid.c: 2 warnings, 0 errors
-compiling dm_motor.c...
+compiling can_user.c...
 compiling chassis_task.c...
-..\balance_application\all_task\chassis_task.c(730): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+..\balance_application\all_task\chassis_task.c(714): warning:  #1035-D: single-precision operand implicitly converted to double-precision
                   hero_chassis_power_speed_control->chassis_motor[i].give_current = chassis_motor_i1 / MA_A;
-..\balance_application\all_task\chassis_task.c(740): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+..\balance_application\all_task\chassis_task.c(724): warning:  #1035-D: single-precision operand implicitly converted to double-precision
                       hero_chassis_power_speed_control->chassis_motor[i].give_current = chassis_motor_i2 / MA_A;
-..\balance_application\all_task\chassis_task.c(744): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+..\balance_application\all_task\chassis_task.c(728): warning:  #1035-D: single-precision operand implicitly converted to double-precision
                       hero_chassis_power_speed_control->chassis_motor[i].give_current = chassis_motor_i1 / MA_A;
-..\balance_application\all_task\chassis_task.c(670): warning:  #550-D: variable "chassis_buffer_rm_max"  was set but never used
+..\balance_application\all_task\chassis_task.c(654): warning:  #550-D: variable "chassis_buffer_rm_max"  was set but never used
       static fp32 chassis_buffer_rm_max    = 0.0f;    /* ���������� */
-..\balance_application\all_task\chassis_task.c(671): warning:  #550-D: variable "chassos_buffer_rm_use"  was set but never used
+..\balance_application\all_task\chassis_task.c(655): warning:  #550-D: variable "chassos_buffer_rm_use"  was set but never used
       static fp32 chassos_buffer_rm_use    = 0.0f;    /* �������������������� */
-..\balance_application\all_task\chassis_task.c(678): warning:  #177-D: variable "numerator"  was declared but never referenced
+..\balance_application\all_task\chassis_task.c(662): warning:  #177-D: variable "numerator"  was declared but never referenced
       static fp32 numerator = 0.0f;
-..\balance_application\all_task\chassis_task.c(679): warning:  #177-D: variable "denominator"  was declared but never referenced
+..\balance_application\all_task\chassis_task.c(663): warning:  #177-D: variable "denominator"  was declared but never referenced
       static fp32 denominator = 0.0f;
-..\balance_application\all_task\chassis_task.c(582): warning:  #177-D: function "Chassis_Keyboard_To_Control_Xy"  was declared but never referenced
+..\balance_application\all_task\chassis_task.c(566): warning:  #177-D: function "Chassis_Keyboard_To_Control_Xy"  was declared but never referenced
   static void Chassis_Keyboard_To_Control_Xy(chassis_control_t *mini_chassis_keyboard_to_control_cacl)
-..\balance_application\all_task\chassis_task.c(658): warning:  #177-D: function "Chassis_Power_Speed_Control"  was declared but never referenced
+..\balance_application\all_task\chassis_task.c(642): warning:  #177-D: function "Chassis_Power_Speed_Control"  was declared but never referenced
   static void Chassis_Power_Speed_Control(chassis_control_t *hero_chassis_power_speed_control)
-..\balance_application\all_task\chassis_task.c(751): warning:  #177-D: function "Chassis_Power_Feeback_Updata"  was declared but never referenced
+..\balance_application\all_task\chassis_task.c(735): warning:  #177-D: function "Chassis_Power_Feeback_Updata"  was declared but never referenced
   static void Chassis_Power_Feeback_Updata(chassis_control_t *chassis_power_feeback_updata)
 ..\balance_application\all_task\chassis_task.c: 10 warnings, 0 errors
+compiling ins_task.c...
+compiling dm_motor.c...
 linking...
-Program Size: Code=58200 RO-data=1852 RW-data=544 ZI-data=33904  
+Program Size: Code=58204 RO-data=1856 RW-data=532 ZI-data=33908  
 FromELF: creating hex file...
-"hero_dm_chassis\hero_dm_chassis.axf" - 0 Error(s), 12 Warning(s).
+"hero_dm_chassis\hero_dm_chassis.axf" - 0 Error(s), 10 Warning(s).
 
 <h2>Software Packages used:</h2>
 
@@ -82,7 +78,7 @@ Package Vendor: Keil
 
    * Component: ARM::CMSIS:CORE:5.5.0
       Include file:  CMSIS\Core\Include\tz_context.h
-Build Time Elapsed:  00:00:05
+Build Time Elapsed:  00:00:14
 </pre>
 </body>
 </html>

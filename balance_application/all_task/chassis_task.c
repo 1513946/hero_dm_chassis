@@ -11,16 +11,21 @@
 
 /* ---- 旁路开关：外设尚未接好时把对应计算短路，代码保留 ---- */
 #define CHASSIS_BYPASS_REFEREE 1   /* 无裁判系统：跳过功率限制 */
-#define CLIMB_WHEEL_SPEED_SCALE 0.15f
+#define RC_AXIS_MAX 127.0f
+#define DT7_STICK_FULL_SCALE 660.0f
+#define CLIMB_ARM_SPEED_BIAS 0.25f
 
-/* 位号与 dm_config[] 一致。上车前核对 CAN ID 与实际安装位置。 */
-#define FRONT_LEFT_MOTOR  (1U << 0)
-#define FRONT_RIGHT_MOTOR (1U << 1)
-#define REAR_LEFT_MOTOR   (1U << 2)
-#define REAR_RIGHT_MOTOR  (1U << 3)
+/* 数组下标与 dm_config[] 的电机顺序一致。 */
+enum
+{
+    FRONT_LEFT_MOTOR = 0,
+    FRONT_RIGHT_MOTOR,
+    REAR_LEFT_MOTOR,
+    REAR_RIGHT_MOTOR
+};
 
 /* 左拨杆下的爬阶档：四台 DM 电机全部保持使能。 */
-#define ALL_CLIMB_MOTORS (FRONT_LEFT_MOTOR | FRONT_RIGHT_MOTOR | REAR_LEFT_MOTOR | REAR_RIGHT_MOTOR)
+#define ALL_CLIMB_MOTORS ((1U << DM_MOTOR_COUNT) - 1U)
 
 #define Remote_Deadband_Limit(mag_input, msg_output, dead_control)   \
 {                                                                    \
@@ -69,39 +74,29 @@ chassis_control_t hero_chassis;
 /* 本轮底盘任务的指令副本，麦轮和摆臂使用同一次读取的结果。 */
 static chassis_c_get_data_t gimbal_chassis_command;
 
-static uint8_t select_climb_motors(const chassis_c_get_data_t *command)
+static void get_climb_arm_requests(const chassis_c_get_data_t *command,
+                                   int8_t arm_requests[DM_MOTOR_COUNT])
 {
-    uint8_t group_mask;
-
-    if (!command->climb_mode)
+    const bool front_selected = command->climb_group == CLIMB_FRONT_GROUP;
+    if (!front_selected && command->climb_group != CLIMB_REAR_GROUP)
     {
-        return 0U;
+        return;
     }
 
-    /* 先选前后组，再按侧别保留组内对应的电机位。 */
-    switch (command->climb_group)
-    {
-    case CLIMB_FRONT_GROUP:
-        group_mask = FRONT_LEFT_MOTOR | FRONT_RIGHT_MOTOR;
-        break;
-    case CLIMB_REAR_GROUP:
-        group_mask = REAR_LEFT_MOTOR | REAR_RIGHT_MOTOR;
-        break;
-    default:
-        return 0U;
-    }
+    /* 右杆纵轴给基础速度，横轴向右时右侧加速、左侧减速。 */
+    const float base_speed = (float)abs(command->joint_forward);
+    const float bias = CLIMB_ARM_SPEED_BIAS * command->joint_lateral / RC_AXIS_MAX;
+    const int8_t left_speed = (int8_t)fminf(base_speed * (1.0f - bias) + 0.5f, RC_AXIS_MAX);
+    const int8_t right_speed = (int8_t)fminf(base_speed * (1.0f + bias) + 0.5f, RC_AXIS_MAX);
+    const int8_t stick_direction = command->joint_forward < 0 ? -1 : 1;
 
-    switch (command->climb_side)
-    {
-    case CLIMB_BOTH_SIDES:
-        return group_mask;
-    case CLIMB_LEFT_SIDE:
-        return group_mask & (FRONT_LEFT_MOTOR | REAR_LEFT_MOTOR);
-    case CLIMB_RIGHT_SIDE:
-        return group_mask & (FRONT_RIGHT_MOTOR | REAR_RIGHT_MOTOR);
-    default:
-        return 0U;
-    }
+    /* 另一组沿用同侧的速度大小，方向由拨轮独立决定。 */
+    const int8_t front_direction = front_selected ? stick_direction : command->other_group_direction;
+    const int8_t rear_direction = front_selected ? command->other_group_direction : stick_direction;
+    arm_requests[FRONT_LEFT_MOTOR] = left_speed * front_direction;
+    arm_requests[FRONT_RIGHT_MOTOR] = right_speed * front_direction;
+    arm_requests[REAR_LEFT_MOTOR] = left_speed * rear_direction;
+    arm_requests[REAR_RIGHT_MOTOR] = right_speed * rear_direction;
 }
 
 void Chassis_Task(void *argument)
@@ -119,6 +114,8 @@ void Chassis_Task(void *argument)
 
     for (;;)
     {
+        int8_t arm_requests[DM_MOTOR_COUNT] = {0};
+
         can_bus_service();
         read_gimbal_chassis_command(&gimbal_chassis_command);
         Chassis_Set_Mode(&hero_chassis);
@@ -130,16 +127,10 @@ void Chassis_Task(void *argument)
                         hero_chassis.chassis_motor[1].give_current,
                         hero_chassis.chassis_motor[2].give_current,
                         hero_chassis.chassis_motor[3].give_current);
-        /* 麦轮指令走 CAN1。这里把摆臂选择和伸收量交给 CAN3 电机驱动。
-         * 左拨杆下（climb_mode）时四台 DM 电机全部使能，遥控只对选中的电机动目标角，
-         * 其余电机冻结目标持位。climb_mode 为 0 时请求失能。 */
-        {
-            const bool climb_enabled = gimbal_chassis_command.climb_mode;
-
-            dm_motor_control_step(climb_enabled ? ALL_CLIMB_MOTORS : 0U,
-                                  select_climb_motors(&gimbal_chassis_command),
-                                  climb_enabled ? gimbal_chassis_command.joint_motion_request : 0);
-        }
+        /* 上台阶时四臂使能，各轴请求为 0 时保持当前目标角。 */
+        get_climb_arm_requests(&gimbal_chassis_command, arm_requests);
+        dm_motor_control_step(gimbal_chassis_command.climb_mode ? ALL_CLIMB_MOTORS : 0U,
+                              arm_requests);
         osDelay(1);
     }
 }
@@ -246,27 +237,18 @@ static void Chassis_Set_Mode(chassis_control_t *mini_chassis_set_mode)
 
     command = mini_chassis_set_mode->chassis_gimbal_can_data;
 
-    /* 爬阶时只在麦轮档驱动车轮，摆臂档给麦轮零电流。 */
-    if (command->climb_mode)
-    {
-        mini_chassis_set_mode->chassis_mode = command->climb_group == CLIMB_MECANUM_WHEELS
-            ? CHASSIS_NO_FOLLOW_GIMBAL : CHASSIS_ZERO_FORCE;
-    }
-    else if (command->chassis_mode == 0)
-    {
-        mini_chassis_set_mode->chassis_mode = CHASSIS_ZERO_FORCE;
-    }
-    else if (command->chassis_mode == 1)
-    {
-        mini_chassis_set_mode->chassis_mode = CHASSIS_NO_MOVE;
-    }
-    else if (command->chassis_mode == 2)
+    /* 上台阶三个档都允许麦轮按车身方向移动。 */
+    if (command->climb_mode || command->chassis_mode == 2)
     {
         mini_chassis_set_mode->chassis_mode = CHASSIS_NO_FOLLOW_GIMBAL;
     }
     else if (command->chassis_mode == 3)
     {
         mini_chassis_set_mode->chassis_mode = CHASSIS_FOLLOW_GIMBAL;
+    }
+    else
+    {
+        mini_chassis_set_mode->chassis_mode = CHASSIS_ZERO_FORCE;
     }
 
     /* 超电模式 */
@@ -574,10 +556,11 @@ static void Chassis_Action_To_Control_Cacl(chassis_control_t *mini_chassis_actio
 static void Chassis_Rc_To_Control_Xy(chassis_control_t *mini_chassis_rc_to_control_cacl)
 {
     const chassis_c_get_data_t *command = mini_chassis_rc_to_control_cacl->chassis_gimbal_can_data;
-    const float speed_scale = command->climb_mode ? CLIMB_WHEEL_SPEED_SCALE : 1.0f;
+    /* 报文使用归一化值，换算回 DT7 杆量后沿用原行驶增益。 */
+    const float axis_scale = DT7_STICK_FULL_SCALE / RC_AXIS_MAX;
 
-    mini_chassis_rc_to_control_cacl->vx_nomal_speed = command->x_rc_data * RC_X_SENSE * speed_scale;
-    mini_chassis_rc_to_control_cacl->vy_nomal_speed = command->y_rc_data * RC_Y_SENSE * speed_scale;
+    mini_chassis_rc_to_control_cacl->vx_nomal_speed = command->x_rc_data * RC_X_SENSE * axis_scale;
+    mini_chassis_rc_to_control_cacl->vy_nomal_speed = command->y_rc_data * RC_Y_SENSE * axis_scale;
 }
 
 static void Chassis_Keyboard_To_Control_Xy(chassis_control_t *mini_chassis_keyboard_to_control_cacl)

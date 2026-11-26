@@ -50,49 +50,38 @@ typedef struct can_user
     fp32 V_cap_value;       /* 电容电压 */
 } super_cap_t;
 
-/* 云台 V1 协议 0x307，data[6] 的机构和侧别编码。 */
+/* 0x307 data[4] 的 bit 5–4：左拨杆下时用右拨杆选爬阶档。 */
 enum
 {
-    CLIMB_FRONT_GROUP = 0,
-    CLIMB_MECANUM_WHEELS = 1,
-    CLIMB_REAR_GROUP = 2
-};
-
-enum
-{
-    CLIMB_BOTH_SIDES = 0,
-    CLIMB_LEFT_SIDE = 1,
-    CLIMB_RIGHT_SIDE = 2
+    CLIMB_NORMAL = 0,
+    CLIMB_FRONT_GROUP = 1,
+    CLIMB_REAR_GROUP = 2,
+    CLIMB_MECANUM_WHEELS = 3
 };
 
 /* 云台板经 0x307 下发的数据（底盘模式和遥控量都从这里来） */
 typedef struct
 {
-    int16_t x_rc_data;        /* 16 位 X_rc 摇杆 */
-    int16_t y_rc_data;        /* 16 位 Y_rc 摇杆 */
+    int16_t x_rc_data;        /* 左杆纵轴，-127 到 127 */
+    int16_t y_rc_data;        /* 左杆横轴，-127 到 127 */
     uint8_t x_key_data;       /* 两位 X_key */
     uint8_t y_key_data;       /* 两位 Y_key */
-    uint8_t chassis_mode;     /* 底盘模式 0零力 1静止 2不跟随 3跟随 */
+    uint8_t chassis_mode;     /* 底盘模式 0零力 2不跟随 3跟随 */
     uint8_t cap_mode;         /* 超电开关 */
     uint8_t top_mode;         /* 小陀螺开关 */
     uint8_t follow_mode;      /* 一键掉头 */
     uint8_t follow_mode_last; /* 一键掉头上一次状态 */
     uint8_t key_control;      /* 键盘控制（比赛模式） */
-    /* 协议版本位在普通行驶时也会置位。是否爬阶看下面的 climb_mode。 */
-    bool uses_climb_protocol;
     bool climb_mode;
-    /* 机构和侧别取上述枚举值，只有爬阶档才使用。 */
     uint8_t climb_group;
-    uint8_t climb_side;
-    int8_t joint_motion_request; /* -100 到 100，0 保持目标角。 */
+    int8_t joint_forward;          /* 右杆纵轴，控制主组方向和速度 */
+    int8_t joint_lateral;          /* 右杆横轴，控制左右侧速度差 */
+    int8_t other_group_direction;  /* 拨轮选择另一组的方向，-1、0、+1 */
 } chassis_c_get_data_t;
 
 /* 0x307 接收诊断计数器，供 Keil Watch 查看 */
-extern volatile uint32_t chassis_top_rx_on_count;
-extern volatile uint32_t chassis_top_rx_off_count;
 extern volatile uint32_t chassis_top_rx_bad_frame_count;
 extern volatile uint32_t chassis_can_rx_error_count;
-extern volatile uint8_t  chassis_top_rx_last_off_flags;
 
 /* 反馈计数与角度无关：电机静止时仍应持续增长。 */
 extern volatile uint32_t chassis_motor_rx_count[4];
@@ -102,7 +91,7 @@ typedef struct
 {
     uint32_t rx_count;               /* CAN2 收到的标准 ID 0x307 帧，解析前计数 */
     uint32_t last_rx_ms;
-    uint32_t legacy_reject_count;    /* 已使用V1后收到旧协议，按原规则拒绝 */
+    uint32_t format_reject_count;    /* 0x307 的格式标记错误 */
     uint32_t stop_count;
     uint32_t remote_invalid_count;
     uint8_t last_data[8];            /* 最近一条格式正确的0x307原始报文 */

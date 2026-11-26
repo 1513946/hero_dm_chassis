@@ -65,9 +65,8 @@ HAL_StatusTypeDef dm_motor_disable(uint8_t index);
 HAL_StatusTypeDef dm_motor_request_feedback(uint8_t index);
 HAL_StatusTypeDef dm_motor_send_mit(uint8_t index, float position, float velocity,
                                    float kp, float kd, float torque);
-/* 底盘任务周期调用。enabled_motors 的 bit0 到 bit3 是本轮保持使能的电机；
- * selected_motors 是其子集，表示允许遥控器动目标角的电机。 */
-void dm_motor_control_step(uint8_t enabled_motors, uint8_t selected_motors,
-                           int8_t joint_motion_request);
+/* enabled_motors 按电机下标置位。各轴请求范围 -127～127，0 表示持位。 */
+void dm_motor_control_step(uint8_t enabled_motors,
+                           const int8_t arm_requests[DM_MOTOR_COUNT]);
 
 #endif

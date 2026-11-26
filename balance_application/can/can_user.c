@@ -31,19 +31,16 @@ volatile uint32_t chassis_motor_rx_count[4];
 volatile uint32_t chassis_motor_last_rx_ms[4];
 volatile can2_command_diag_t can2_command_diag;
 
-/* Keil Watch 诊断计数器：区分收到的 OFF 帧与本地模式变化 */
-volatile uint32_t chassis_top_rx_on_count      = 0;
-volatile uint32_t chassis_top_rx_off_count     = 0;
+/* Keil Watch 接收诊断。 */
 volatile uint32_t chassis_top_rx_bad_frame_count = 0;
 volatile uint32_t chassis_can_rx_error_count   = 0;
-volatile uint8_t  chassis_top_rx_last_off_flags = 0;
 
 /* 超时按底盘本地收到 0x307 的时刻计算，和云台的时钟无关。 */
 #define GIMBAL_CHASSIS_COMMAND_TIMEOUT_MS 100U
-#define CHASSIS_COMMAND_CLIMB (1U << 2)
-#define CHASSIS_COMMAND_STOP (1U << 3)
-#define CHASSIS_COMMAND_REMOTE_VALID (1U << 4)
-#define CHASSIS_COMMAND_LAYOUT_V1 (1U << 5)
+#define CHASSIS_COMMAND_REMOTE_VALID (1U << 2)
+#define CHASSIS_COMMAND_CAP (1U << 3)
+#define CHASSIS_COMMAND_STOP (1U << 0)
+#define CHASSIS_COMMAND_FORMAT 0x01U
 
 /* 中断发布最新一帧。底盘任务复制后再使用，Watch 可直接查看原始解包结果。 */
 volatile chassis_c_get_data_t mini_chassis;
@@ -63,62 +60,47 @@ volatile uint32_t from_yuntai_can = 0;
 /* 与云台 CAN_gimbal_send_chassis() 的 0x307 布局一致。 */
 static void receive_gimbal_chassis_command(const uint8_t data[8])
 {
+    static const int8_t dial_directions[4] = {0, 1, -1, 0};
     chassis_c_get_data_t command = {0};
-    const uint8_t status_flags = data[6];
-    const bool uses_climb_protocol = (status_flags & CHASSIS_COMMAND_LAYOUT_V1) != 0U;
+    const uint8_t status = data[4];
+    const bool stop_requested = (data[5] & CHASSIS_COMMAND_STOP) != 0U;
+    const bool remote_valid = (status & CHASSIS_COMMAND_REMOTE_VALID) != 0U;
 
-    /* 收到过 V1 后沿用该协议，避免旧格式覆盖爬阶指令。 */
-    if (mini_chassis.uses_climb_protocol && !uses_climb_protocol)
+    if (data[7] != CHASSIS_COMMAND_FORMAT)
     {
-        can2_command_diag.legacy_reject_count++;
+        can2_command_diag.format_reject_count++;
         return;
     }
 
-    if (uses_climb_protocol)
+    if (stop_requested)
     {
-        if ((status_flags & CHASSIS_COMMAND_STOP) != 0U)
-        {
-            can2_command_diag.stop_count++;
-        }
-        if ((status_flags & CHASSIS_COMMAND_REMOTE_VALID) == 0U)
-        {
-            can2_command_diag.remote_invalid_count++;
-        }
+        can2_command_diag.stop_count++;
+    }
+    if (!remote_valid)
+    {
+        can2_command_diag.remote_invalid_count++;
     }
 
-    /* V1 报文要求遥控有效且未请求停车。否则本帧运动量保持初始值 0。 */
-    command.uses_climb_protocol = uses_climb_protocol;
-    if (!uses_climb_protocol ||
-        (status_flags & (CHASSIS_COMMAND_STOP | CHASSIS_COMMAND_REMOTE_VALID)) == CHASSIS_COMMAND_REMOTE_VALID)
+    /* 停车或遥控无效时发布全零指令，使麦轮零力并退出爬阶。 */
+    if (!stop_requested && remote_valid)
     {
-        command.x_rc_data = (int16_t)((data[0] << 8) | data[1]);
-        command.y_rc_data = (int16_t)((data[2] << 8) | data[3]);
-        command.chassis_mode = (data[5] >> 6) & 3U;
-        command.cap_mode = (data[5] >> 5) & 1U;
-
-        if (uses_climb_protocol)
-        {
-            command.climb_mode = (status_flags & CHASSIS_COMMAND_CLIMB) != 0U;
-            command.climb_group = status_flags & 3U;
-            command.climb_side = status_flags >> 6;
-            /* 以有符号字节还原摇杆方向，例如 0xCE 对应 -50。 */
-            command.joint_motion_request = (int8_t)data[7];
-        }
-        else
-        {
-            command.x_key_data = (data[4] >> 6) & 3U;
-            command.y_key_data = (data[4] >> 4) & 3U;
-            command.top_mode = (data[5] >> 4) & 1U;
-            command.follow_mode = (data[5] >> 3) & 1U;
-            command.follow_mode_last = (data[5] >> 2) & 1U;
-            command.key_control = (data[5] >> 1) & 1U;
-        }
+        command.x_rc_data = (int8_t)data[0];
+        command.y_rc_data = (int8_t)data[1];
+        command.joint_forward = (int8_t)data[2];
+        command.joint_lateral = (int8_t)data[3];
+        command.chassis_mode = status >> 6;
+        command.climb_group = (status >> 4) & 3U;
+        command.climb_mode = command.climb_group != CLIMB_NORMAL;
+        command.cap_mode = (status & CHASSIS_COMMAND_CAP) != 0U;
+        command.other_group_direction = dial_directions[status & 3U];
     }
-
+    for (uint8_t index = 0U; index < 8U; index++)
+    {
+        can2_command_diag.last_data[index] = data[index];
+    }
     from_yuntai_can++;
     mini_chassis = command;
     gimbal_chassis_command_received_at_ms = HAL_GetTick();
-    
 }
 
 /* 9025 电机（云台）编码器解析：只取机械角 */
@@ -268,22 +250,6 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
                     diag->rx_invalid++;
                     break;
                 }
-                {
-                    uint8_t index;
-                    for (index = 0U; index < 8U; index++)
-                    {
-                        can2_command_diag.last_data[index] = rx_data[index];
-                    }
-                }
-                if ((rx_data[5] & 0x10U) != 0U)
-                {
-                    chassis_top_rx_on_count++;
-                }
-                else
-                {
-                    chassis_top_rx_off_count++;
-                    chassis_top_rx_last_off_flags = rx_data[5];
-                }
                 receive_gimbal_chassis_command(rx_data);
                 gimbal_can2_num++;
                 break;
@@ -395,11 +361,9 @@ void read_gimbal_chassis_command(chassis_c_get_data_t *command)
     command_age_ms = HAL_GetTick() - gimbal_chassis_command_received_at_ms;
     __set_PRIMASK(interrupt_mask);
 
-    /* 断流时清空控制量，只在指令副本中保留最近的协议标记。 */
+    /* 断流时清空控制量，使麦轮零力并退出爬阶。 */
     if (command_age_ms >= GIMBAL_CHASSIS_COMMAND_TIMEOUT_MS)
     {
-        const bool uses_climb_protocol = command->uses_climb_protocol;
         *command = (chassis_c_get_data_t){0};
-        command->uses_climb_protocol = uses_climb_protocol;
     }
 }
