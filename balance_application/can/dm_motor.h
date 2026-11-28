@@ -41,7 +41,6 @@ extern volatile dm_can_diag_t dm_can_diag;
 /* 遥控机械臂在线调参，四台共用；在 Keil Watch 的 Value 列修改。 */
 extern volatile float dm_remote_kp;
 extern volatile float dm_remote_kd;
-extern volatile float dm_remote_speed_rad_s;
 /* 重力前馈在线调参：enable 默认 1，调试期间保持开启，持位的未选中电机才不会下沉。
  * load_kg 是这条腿静态承担的整机重量（kg），总重 20 kg、四条腿均匀时填 5.0。
  * 车轮也在承重时，腿实际承担的重量可能远小于 5 kg，需要按实际工况填。 */
@@ -65,8 +64,8 @@ HAL_StatusTypeDef dm_motor_disable(uint8_t index);
 HAL_StatusTypeDef dm_motor_request_feedback(uint8_t index);
 HAL_StatusTypeDef dm_motor_send_mit(uint8_t index, float position, float velocity,
                                    float kp, float kd, float torque);
-/* enabled_motors 按电机下标置位。各轴请求范围 -127～127，0 表示持位。 */
+/* enabled_motors 按电机下标置位。各轴速度用电机侧 rad/s，0 表示持位。 */
 void dm_motor_control_step(uint8_t enabled_motors,
-                           const int8_t arm_requests[DM_MOTOR_COUNT]);
+                           const float arm_speed_rad_s[DM_MOTOR_COUNT]);
 
 #endif

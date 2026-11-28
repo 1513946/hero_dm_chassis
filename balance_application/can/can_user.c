@@ -60,7 +60,6 @@ volatile uint32_t from_yuntai_can = 0;
 /* 与云台 CAN_gimbal_send_chassis() 的 0x307 布局一致。 */
 static void receive_gimbal_chassis_command(const uint8_t data[8])
 {
-    static const int8_t dial_directions[4] = {0, 1, -1, 0};
     chassis_c_get_data_t command = {0};
     const uint8_t status = data[4];
     const bool stop_requested = (data[5] & CHASSIS_COMMAND_STOP) != 0U;
@@ -84,6 +83,8 @@ static void receive_gimbal_chassis_command(const uint8_t data[8])
     /* 停车或遥控无效时发布全零指令，使麦轮零力并退出爬阶。 */
     if (!stop_requested && remote_valid)
     {
+        const uint8_t dial = status & 3U;
+
         command.x_rc_data = (int8_t)data[0];
         command.y_rc_data = (int8_t)data[1];
         command.joint_forward = (int8_t)data[2];
@@ -92,7 +93,8 @@ static void receive_gimbal_chassis_command(const uint8_t data[8])
         command.climb_group = (status >> 4) & 3U;
         command.climb_mode = command.climb_group != CLIMB_NORMAL;
         command.cap_mode = (status & CHASSIS_COMMAND_CAP) != 0U;
-        command.other_group_direction = dial_directions[status & 3U];
+        /* 拨轮码 3 保留，收到时按中位处理。 */
+        command.climb_dial = dial <= CLIMB_DIAL_REVERSE ? dial : CLIMB_DIAL_CENTER;
     }
     for (uint8_t index = 0U; index < 8U; index++)
     {
@@ -232,29 +234,29 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
         {
             switch (rx_header.Identifier)
             {
-            case 0x200:
-                if (rx_header.DataLength < FDCAN_DLC_BYTES_4)
-                {
-                    diag->rx_invalid++;
+                case 0x200:
+                    if (rx_header.DataLength < FDCAN_DLC_BYTES_4)
+                    {
+                        diag->rx_invalid++;
+                        break;
+                    }
+                    get_9025_motor_ecd(&motor_gimbal[0], rx_data);
                     break;
-                }
-                get_9025_motor_ecd(&motor_gimbal[0], rx_data);
-                break;
-            case CAN2_recive_gimbal_msg:
-                /* 校验：标准帧 + 数据帧 + 8 字节 */
-                if (rx_header.IdType      != FDCAN_STANDARD_ID ||
-                    rx_header.RxFrameType != FDCAN_DATA_FRAME  ||
-                    rx_header.DataLength  != FDCAN_DLC_BYTES_8)
-                {
-                    chassis_top_rx_bad_frame_count++;
-                    diag->rx_invalid++;
+                case CAN2_recive_gimbal_msg:
+                    /* 校验：标准帧 + 数据帧 + 8 字节 */
+                    if (rx_header.IdType      != FDCAN_STANDARD_ID ||
+                        rx_header.RxFrameType != FDCAN_DATA_FRAME  ||
+                        rx_header.DataLength  != FDCAN_DLC_BYTES_8)
+                    {
+                        chassis_top_rx_bad_frame_count++;
+                        diag->rx_invalid++;
+                        break;
+                    }
+                    receive_gimbal_chassis_command(rx_data);
+                    gimbal_can2_num++;
                     break;
-                }
-                receive_gimbal_chassis_command(rx_data);
-                gimbal_can2_num++;
-                break;
-            default:
-                break;
+                default:
+                    break;
             }
         }
     }

@@ -6,7 +6,6 @@
 #include "cmsis_os2.h"
 #include "pid.h"
 #include "math.h"
-#include <stdlib.h>
 #include <stdint.h>
 
 /* ---- 旁路开关：外设尚未接好时把对应计算短路，代码保留 ---- */
@@ -14,6 +13,20 @@
 #define RC_AXIS_MAX 127.0f
 #define DT7_STICK_FULL_SCALE 660.0f
 #define CLIMB_ARM_SPEED_BIAS 0.25f
+
+/* Keil Watch 可按右拨杆档位分别调节。0 档的普通行驶增益在速度计算中固定。 */
+volatile float climb_wheel_speed_scale[] = {
+    [CLIMB_SELECT_PAIR] = 1.0f,
+    [CLIMB_ALL_ARMS] = 1.0f,
+    [CLIMB_MECANUM_WHEELS] = 1.0f
+};
+volatile float climb_spin_speed = 800.0f; /* 右中自转，使用麦轮解算的 wz 指令单位。 */
+
+/* 前后组满杆速度分别调节，单位为电机侧 rad/s。 */
+volatile float climb_pair_front_speed_rad_s = 0.50f;
+volatile float climb_pair_rear_speed_rad_s = 0.50f;
+volatile float climb_all_front_speed_rad_s = 0.50f;
+volatile float climb_all_rear_speed_rad_s = 0.50f;
 
 /* 数组下标与 dm_config[] 的电机顺序一致。 */
 enum
@@ -74,29 +87,53 @@ chassis_control_t hero_chassis;
 /* 本轮底盘任务的指令副本，麦轮和摆臂使用同一次读取的结果。 */
 static chassis_c_get_data_t gimbal_chassis_command;
 
-static void get_climb_arm_requests(const chassis_c_get_data_t *command,
-                                   int8_t arm_requests[DM_MOTOR_COUNT])
+static void get_climb_arm_speeds(const chassis_c_get_data_t *command,
+                                float arm_speed_rad_s[DM_MOTOR_COUNT])
 {
-    const bool front_selected = command->climb_group == CLIMB_FRONT_GROUP;
-    if (!front_selected && command->climb_group != CLIMB_REAR_GROUP)
+    static uint8_t pair_selection = CLIMB_DIAL_FORWARD;
+    float front_speed = 0.0f;
+    float rear_speed = 0.0f;
+
+    if (command->climb_group == CLIMB_SELECT_PAIR)
     {
-        return;
+        /* 右上：拨轮只负责选组，回中沿用上次选择。 */
+        if (command->climb_dial != CLIMB_DIAL_CENTER)
+        {
+            pair_selection = command->climb_dial;
+        }
+        
+        if (pair_selection == CLIMB_DIAL_FORWARD)
+        {
+            front_speed = climb_pair_front_speed_rad_s;
+        }
+        else
+        {
+            rear_speed = climb_pair_rear_speed_rad_s;
+        }
+    }
+    else
+    {
+        pair_selection = CLIMB_DIAL_FORWARD; /* 再进右上时默认选前组。 */
+        if (command->climb_group != CLIMB_ALL_ARMS)
+        {
+            return;
+        }
+        /* 右下：四臂一起由右杆控制，前后组分别定满杆速度。 */
+        front_speed = climb_all_front_speed_rad_s;
+        rear_speed = climb_all_rear_speed_rad_s;
     }
 
-    /* 右杆纵轴给基础速度，横轴向右时右侧加速、左侧减速。 */
-    const float base_speed = (float)abs(command->joint_forward);
+    /* 纵轴给运动方向和速度，横轴最多分配 ±25% 差速，各侧幅度限在满杆以内。 */
+    const float speed_fraction = (float)command->joint_forward / RC_AXIS_MAX;
+    const float magnitude = fabsf(speed_fraction);
+    const float direction = speed_fraction < 0.0f ? -1.0f : 1.0f;
     const float bias = CLIMB_ARM_SPEED_BIAS * command->joint_lateral / RC_AXIS_MAX;
-    const int8_t left_speed = (int8_t)fminf(base_speed * (1.0f - bias) + 0.5f, RC_AXIS_MAX);
-    const int8_t right_speed = (int8_t)fminf(base_speed * (1.0f + bias) + 0.5f, RC_AXIS_MAX);
-    const int8_t stick_direction = command->joint_forward < 0 ? -1 : 1;
-
-    /* 另一组沿用同侧的速度大小，方向由拨轮独立决定。 */
-    const int8_t front_direction = front_selected ? stick_direction : command->other_group_direction;
-    const int8_t rear_direction = front_selected ? command->other_group_direction : stick_direction;
-    arm_requests[FRONT_LEFT_MOTOR] = left_speed * front_direction;
-    arm_requests[FRONT_RIGHT_MOTOR] = right_speed * front_direction;
-    arm_requests[REAR_LEFT_MOTOR] = left_speed * rear_direction;
-    arm_requests[REAR_RIGHT_MOTOR] = right_speed * rear_direction;
+    const float left_fraction = direction * fminf(magnitude * (1.0f - bias), 1.0f);
+    const float right_fraction = direction * fminf(magnitude * (1.0f + bias), 1.0f);
+    arm_speed_rad_s[FRONT_LEFT_MOTOR] = front_speed * left_fraction;
+    arm_speed_rad_s[FRONT_RIGHT_MOTOR] = front_speed * right_fraction;
+    arm_speed_rad_s[REAR_LEFT_MOTOR] = rear_speed * left_fraction;
+    arm_speed_rad_s[REAR_RIGHT_MOTOR] = rear_speed * right_fraction;
 }
 
 void Chassis_Task(void *argument)
@@ -114,7 +151,7 @@ void Chassis_Task(void *argument)
 
     for (;;)
     {
-        int8_t arm_requests[DM_MOTOR_COUNT] = {0};
+        float arm_speed_rad_s[DM_MOTOR_COUNT] = {0};
 
         can_bus_service();
         read_gimbal_chassis_command(&gimbal_chassis_command);
@@ -128,9 +165,9 @@ void Chassis_Task(void *argument)
                         hero_chassis.chassis_motor[2].give_current,
                         hero_chassis.chassis_motor[3].give_current);
         /* 上台阶时四臂使能，各轴请求为 0 时保持当前目标角。 */
-        get_climb_arm_requests(&gimbal_chassis_command, arm_requests);
+        get_climb_arm_speeds(&gimbal_chassis_command, arm_speed_rad_s);
         dm_motor_control_step(gimbal_chassis_command.climb_mode ? ALL_CLIMB_MOTORS : 0U,
-                              arm_requests);
+                              arm_speed_rad_s);
         osDelay(1);
     }
 }
@@ -447,6 +484,7 @@ static void Chassis_Action_To_Control_Cacl(chassis_control_t *mini_chassis_actio
     {
         return;
     }
+    const chassis_c_get_data_t *command = mini_chassis_action_to_control_cacl->chassis_gimbal_can_data;
 
 #if CHASSIS_BYPASS_REFEREE
     /* 无裁判系统时键盘控制不可用（键盘速度依赖裁判功率上限），强制走遥控器通道 */
@@ -462,7 +500,15 @@ static void Chassis_Action_To_Control_Cacl(chassis_control_t *mini_chassis_actio
     }
 #endif
 
-    if (mini_chassis_action_to_control_cacl->chassis_top_mode == TOP_ON)
+    if (command->climb_group == CLIMB_MECANUM_WHEELS)
+    {
+        /* 右中：按现有自转正负约定生成 wz，拨轮回中后目标归零。 */
+        const float spin = climb_spin_speed;
+        const int8_t direction = command->climb_dial == CLIMB_DIAL_FORWARD ? -1 :
+                                 command->climb_dial == CLIMB_DIAL_REVERSE ? 1 : 0;
+        mini_chassis_action_to_control_cacl->wz_nomal_speed = direction * spin;
+    }
+    else if (mini_chassis_action_to_control_cacl->chassis_top_mode == TOP_ON)
     {
         if (mini_chassis_action_to_control_cacl->chassis_cap_mode == CAP_ON)
         {
@@ -556,8 +602,9 @@ static void Chassis_Action_To_Control_Cacl(chassis_control_t *mini_chassis_actio
 static void Chassis_Rc_To_Control_Xy(chassis_control_t *mini_chassis_rc_to_control_cacl)
 {
     const chassis_c_get_data_t *command = mini_chassis_rc_to_control_cacl->chassis_gimbal_can_data;
-    /* 报文使用归一化值，换算回 DT7 杆量后沿用原行驶增益。 */
-    const float axis_scale = DT7_STICK_FULL_SCALE / RC_AXIS_MAX;
+    /* 报文量换回 DT7 尺度，再乘当前爬阶档位的麦轮倍率。 */
+    const float mode_scale = command->climb_mode ? climb_wheel_speed_scale[command->climb_group] : 1.0f;
+    const float axis_scale = (DT7_STICK_FULL_SCALE / RC_AXIS_MAX) * mode_scale;
 
     mini_chassis_rc_to_control_cacl->vx_nomal_speed = command->x_rc_data * RC_X_SENSE * axis_scale;
     mini_chassis_rc_to_control_cacl->vy_nomal_speed = command->y_rc_data * RC_Y_SENSE * axis_scale;

@@ -54,9 +54,17 @@ typedef struct can_user
 enum
 {
     CLIMB_NORMAL = 0,
-    CLIMB_FRONT_GROUP = 1,
-    CLIMB_REAR_GROUP = 2,
+    CLIMB_SELECT_PAIR = 1,
+    CLIMB_ALL_ARMS = 2,
     CLIMB_MECANUM_WHEELS = 3
+};
+
+/* 0x307 data[4] 的 bit 1–0：拨轮中位、正偏或负偏。 */
+enum
+{
+    CLIMB_DIAL_CENTER = 0,
+    CLIMB_DIAL_FORWARD = 1,
+    CLIMB_DIAL_REVERSE = 2
 };
 
 /* 云台板经 0x307 下发的数据（底盘模式和遥控量都从这里来） */
@@ -73,10 +81,10 @@ typedef struct
     uint8_t follow_mode_last; /* 一键掉头上一次状态 */
     uint8_t key_control;      /* 键盘控制（比赛模式） */
     bool climb_mode;
-    uint8_t climb_group;
-    int8_t joint_forward;          /* 右杆纵轴，控制主组方向和速度 */
+    uint8_t climb_group;           /* 右拨杆选择的爬阶模式 */
+    int8_t joint_forward;          /* 右杆纵轴，控制摆臂方向和速度 */
     int8_t joint_lateral;          /* 右杆横轴，控制左右侧速度差 */
-    int8_t other_group_direction;  /* 拨轮选择另一组的方向，-1、0、+1 */
+    uint8_t climb_dial;            /* 拨轮三态，由底盘按爬阶模式解释 */
 } chassis_c_get_data_t;
 
 /* 0x307 接收诊断计数器，供 Keil Watch 查看 */

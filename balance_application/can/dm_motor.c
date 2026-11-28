@@ -28,11 +28,10 @@
 
 /* 遥控机械臂在线调参，四台电机共用。
  * Keil Watch 中修改这些变量即可生效；调好后把记录值写回下面的初始值。
- * Kp、Kd 的协议范围分别为 0～500、0～5；速度使用非负值，单位 rad/s。
+ * Kp、Kd 的协议范围分别为 0～500、0～5。
  */
 volatile float dm_remote_kp = 300.0f;             /* 位置增益，影响跟随力度。 */
 volatile float dm_remote_kd = 10.0f;             /* 阻尼增益，影响运动阻尼。 */
-volatile float dm_remote_speed_rad_s = 0.50f;    /* 满杆时目标角的变化速度。 */
 
 /* 重力前馈在线调参。
  * enable 默认 1：调试期间保持开启，持位的未选中电机才不会因缺少前馈而下沉。
@@ -468,10 +467,10 @@ static void stop_remote_motor(uint8_t index, bool feedback_is_fresh,
 
 /* 使能的电机按各自的请求更新目标角，请求为 0 时继续下发 MIT 帧持位。 */
 static void control_remote_motors(uint8_t enabled_motors,
-                                  const int8_t arm_requests[DM_MOTOR_COUNT], uint32_t now,
+                                  const float arm_speed_rad_s[DM_MOTOR_COUNT], uint32_t now,
                                   const dm_feedback_t *feedback)
 {
-    const float angle_per_request = dm_remote_speed_rad_s * (DM_CONTROL_PERIOD_MS / 1000.0f) / 127.0f;
+    const float period_s = DM_CONTROL_PERIOD_MS / 1000.0f;
     /* 汇总本轮需要错峰查询反馈的电机。 */
     uint8_t feedback_request_mask = 0U;
     uint8_t index;
@@ -528,10 +527,10 @@ static void control_remote_motors(uint8_t enabled_motors,
             continue;
         }
 
-        if (arm_requests[index] != 0)
+        if (arm_speed_rad_s[index] != 0.0f)
         {
-            /* 按电机安装方向修正增量，使摇杆方向与关节伸缩方向一致。 */
-            const float motor_position_step = arm_requests[index] * angle_per_request *
+            /* 速度乘以控制周期得到角增量，再按安装方向换算电机正负号。 */
+            const float motor_position_step = arm_speed_rad_s[index] * period_s *
                 dm_config[index].extension_direction;
             const float current_position = feedback[index].position_rad;
             const dm_angle_limit_t *limit = &dm_angle_limit[index];
@@ -594,7 +593,7 @@ static void control_remote_motors(uint8_t enabled_motors,
 
 /* 周期性更新 CAN 诊断和反馈快照，并执行遥控控制。 */
 void dm_motor_control_step(uint8_t enabled_motors,
-                           const int8_t arm_requests[DM_MOTOR_COUNT])
+                           const float arm_speed_rad_s[DM_MOTOR_COUNT])
 {
     dm_feedback_t snapshot[DM_MOTOR_COUNT];
     FDCAN_ErrorCountersTypeDef errors;
@@ -642,5 +641,5 @@ void dm_motor_control_step(uint8_t enabled_motors,
         return;
     }
 
-    control_remote_motors(enabled_motors, arm_requests, now, snapshot);
+    control_remote_motors(enabled_motors, arm_speed_rad_s, now, snapshot);
 }

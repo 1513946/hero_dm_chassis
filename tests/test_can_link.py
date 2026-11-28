@@ -151,17 +151,17 @@ int main(void) {
 
  memset(bytes,0,sizeof bytes);
  bytes[0]=0x81; bytes[1]=100; bytes[2]=0xB0; bytes[3]=25;
- bytes[4]=0x9D; bytes[7]=0x01; /* 不跟随、前臂、超电、遥控有效、另一组正向 */
+ bytes[4]=0x9D; bytes[7]=0x01; /* 不跟随、选一对臂、超电、遥控有效、拨轮正偏 */
  frame(&hfdcan2,0x307,8);
  assert(can2_command_diag.rx_count==1 && from_yuntai_can==1 && mini_chassis.climb_mode);
  assert(mini_chassis.x_rc_data==-127 && mini_chassis.y_rc_data==100);
  assert(mini_chassis.joint_forward==-80 && mini_chassis.joint_lateral==25);
  assert(mini_chassis.chassis_mode==2 && mini_chassis.cap_mode==1);
- assert(mini_chassis.climb_group==CLIMB_FRONT_GROUP && mini_chassis.other_group_direction==1);
+ assert(mini_chassis.climb_group==CLIMB_SELECT_PAIR && mini_chassis.climb_dial==CLIMB_DIAL_FORWARD);
  bytes[4]=0xA6; frame(&hfdcan2,0x307,8);
- assert(mini_chassis.climb_group==CLIMB_REAR_GROUP && mini_chassis.other_group_direction==-1);
- bytes[4]=0xB4; frame(&hfdcan2,0x307,8);
- assert(mini_chassis.climb_group==CLIMB_MECANUM_WHEELS && mini_chassis.other_group_direction==0);
+ assert(mini_chassis.climb_group==CLIMB_ALL_ARMS && mini_chassis.climb_dial==CLIMB_DIAL_REVERSE);
+ bytes[4]=0xB7; frame(&hfdcan2,0x307,8); /* 保留拨轮码按中位处理。 */
+ assert(mini_chassis.climb_group==CLIMB_MECANUM_WHEELS && mini_chassis.climb_dial==CLIMB_DIAL_CENTER);
  tick=199; bytes[7]=0x02; frame(&hfdcan2,0x307,8);
  assert(can2_command_diag.rx_count==4 && from_yuntai_can==3 && can2_command_diag.format_reject_count==1);
  assert(can2_command_diag.last_data[7]==0x01);
